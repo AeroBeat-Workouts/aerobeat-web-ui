@@ -12,21 +12,48 @@ import {
  * @type {readonly (readonly [number, number])[]}
  */
 export const aeroPosePreviewSkeletonConnections = Object.freeze([
-  Object.freeze([0, 11]),
-  Object.freeze([0, 12]),
-  Object.freeze([11, 12]),
-  Object.freeze([11, 13]),
-  Object.freeze([13, 15]),
-  Object.freeze([12, 14]),
-  Object.freeze([14, 16]),
-  Object.freeze([11, 23]),
-  Object.freeze([12, 24]),
-  Object.freeze([23, 24]),
-  Object.freeze([23, 25]),
-  Object.freeze([25, 27]),
-  Object.freeze([24, 26]),
-  Object.freeze([26, 28])
+  Object.freeze([0, 5]),
+  Object.freeze([5, 6]),
+  Object.freeze([5, 7]),
+  Object.freeze([7, 9]),
+  Object.freeze([6, 8]),
+  Object.freeze([8, 10])
 ]);
+
+/**
+ * MoveNet upper-body landmarks visible in the phone calibration checkpoint.
+ *
+ * @type {ReadonlyMap<string, number>}
+ */
+const aeroPosePreviewLandmarkIds = new Map([
+  ["nose", 0],
+  ["left_shoulder", 5],
+  ["right_shoulder", 6],
+  ["left_elbow", 7],
+  ["right_elbow", 8],
+  ["left_wrist", 9],
+  ["right_wrist", 10]
+]);
+
+/**
+ * @type {readonly string[]}
+ */
+const aeroPosePreviewLandmarkOrder = Object.freeze([
+  "nose",
+  "left_wrist",
+  "left_elbow",
+  "left_shoulder",
+  "right_shoulder",
+  "right_elbow",
+  "right_wrist"
+]);
+
+/**
+ * Exponential smoothing weight for fresh landmark samples.
+ *
+ * @type {number}
+ */
+const aeroPosePreviewSmoothingAlpha = 0.42;
 
 /**
  * @typedef {import("@aerobeat/web-contracts").NormalizedPoseFrame} NormalizedPoseFrame
@@ -80,6 +107,7 @@ export const aeroPosePreviewSkeletonConnections = Object.freeze([
  * @property {number} landmarkCount Number of landmarks submitted to the overlay.
  * @property {number} rendererDrawCount Current renderer draw count.
  * @property {{x: number, y: number, width: number, height: number}} contentRect Fitted content rectangle.
+ * @property {number | undefined} mediaPoseDeltaMs Media time minus pose timestamp, when both are comparable.
  */
 
 /**
@@ -90,6 +118,16 @@ export const aeroPosePreviewSkeletonConnections = Object.freeze([
  * @property {number | undefined} intrinsicHeight Source media height.
  * @property {AeroMediaPosePreviewFitMode} fitMode Visible media fit mode.
  * @property {boolean} mirrored Whether normalized x should be mirrored.
+ * @property {{x: number, y: number, width: number, height: number} | undefined} contentRect Explicit fitted media rectangle.
+ */
+
+/**
+ * @typedef {object} AeroMediaPosePreviewLandmark
+ * @property {number} id Stable MoveNet landmark identifier.
+ * @property {string} name Stable AeroBeat landmark name.
+ * @property {number} x Smoothed normalized horizontal position.
+ * @property {number} y Smoothed normalized vertical position.
+ * @property {number} v Detector confidence.
  */
 
 /**
@@ -119,6 +157,12 @@ export class AeroMediaPosePreview extends HTMLElement {
     this.surface = undefined;
     /** @type {NormalizedPoseFrame | undefined} */
     this.poseFrame = undefined;
+    /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
+    this.smoothedLandmarks = new Map();
+    /** @type {string} */
+    this.lastSmoothedFrameKey = "";
+    /** @type {string} */
+    this.lastSmoothedSourceId = "";
     /** @type {ResizeObserver | undefined} */
     this.resizeObserver = undefined;
     const root = this.attachShadow({ mode: "open" });
@@ -301,7 +345,7 @@ export class AeroMediaPosePreview extends HTMLElement {
     this.#applySurfaceToMedia();
     this.renderer.clear({ color: [0, 0, 0, 0] });
     const surface = this.#overlaySurface();
-    const landmarks = normalizePoseLandmarks(this.poseFrame);
+    const landmarks = this.#visiblePoseLandmarks();
     const result = this.renderer.renderLandmarkOverlay(landmarks, {
       surface,
       connections: aeroPosePreviewSkeletonConnections,
@@ -313,6 +357,7 @@ export class AeroMediaPosePreview extends HTMLElement {
     canvas.dataset.landmarkCount = String(landmarks.length);
     canvas.dataset.rendererDrawCount = String(result.status.drawCount);
     canvas.dataset.contentRect = JSON.stringify(computeMediaContentRect(surface));
+    canvas.dataset.mediaPoseDeltaMs = String(this.#mediaPoseDeltaMs() ?? "");
     return this.describePreview();
   }
 
@@ -329,9 +374,10 @@ export class AeroMediaPosePreview extends HTMLElement {
       sourceId: this.surface?.sourceId,
       fitMode: surface.fitMode,
       mirrored: surface.mirrored ?? false,
-      landmarkCount: normalizePoseLandmarks(this.poseFrame).length,
+      landmarkCount: this.#visiblePoseLandmarks().length,
       rendererDrawCount: rendererStatus.drawCount,
-      contentRect: computeMediaContentRect(surface)
+      contentRect: computeMediaContentRect(surface),
+      mediaPoseDeltaMs: this.#mediaPoseDeltaMs()
     };
   }
 
@@ -424,8 +470,78 @@ export class AeroMediaPosePreview extends HTMLElement {
       intrinsicWidth: this.surface?.intrinsicWidth ?? positiveNumberOrUndefined(video.videoWidth),
       intrinsicHeight: this.surface?.intrinsicHeight ?? positiveNumberOrUndefined(video.videoHeight),
       fitMode: this.surface?.fitMode ?? "contain",
-      mirrored: this.surface?.mirrored ?? false
+      mirrored: this.surface?.mirrored ?? false,
+      contentRect: this.#measuredVideoContentRect()
     };
+  }
+
+  /**
+   * @returns {AeroMediaPosePreviewLandmark[]}
+   */
+  #visiblePoseLandmarks() {
+    const sourceId = this.poseFrame?.sourceId ?? "none";
+    const frameKey = `${sourceId}:${this.poseFrame?.timestampMs ?? -1}`;
+    if (frameKey !== this.lastSmoothedFrameKey) {
+      if (sourceId !== this.lastSmoothedSourceId) {
+        this.smoothedLandmarks = new Map();
+      }
+      const rawLandmarks = normalizePoseLandmarks(this.poseFrame);
+      /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
+      const nextSmoothed = new Map();
+      for (const landmark of rawLandmarks) {
+        const previous = this.smoothedLandmarks.get(landmark.name);
+        nextSmoothed.set(landmark.name, previous ? smoothLandmark(previous, landmark) : landmark);
+      }
+      this.smoothedLandmarks = nextSmoothed;
+      this.lastSmoothedFrameKey = frameKey;
+      this.lastSmoothedSourceId = sourceId;
+    }
+    return aeroPosePreviewLandmarkOrder
+      .map((name) => this.smoothedLandmarks.get(name))
+      .filter(isPreviewLandmark);
+  }
+
+  /**
+   * @returns {{x: number, y: number, width: number, height: number} | undefined}
+   */
+  #measuredVideoContentRect() {
+    const canvas = this.#canvasElement();
+    const video = this.#videoElement();
+    const canvasRect = canvas.getBoundingClientRect();
+    const videoRect = video.getBoundingClientRect();
+    if (canvasRect.width <= 0 || canvasRect.height <= 0 || videoRect.width <= 0 || videoRect.height <= 0) {
+      return undefined;
+    }
+    const fitRect = computeMediaContentRect({
+      viewportWidth: videoRect.width,
+      viewportHeight: videoRect.height,
+      intrinsicWidth: this.surface?.intrinsicWidth ?? positiveNumberOrUndefined(video.videoWidth),
+      intrinsicHeight: this.surface?.intrinsicHeight ?? positiveNumberOrUndefined(video.videoHeight),
+      fitMode: this.surface?.fitMode ?? "contain",
+      mirrored: this.surface?.mirrored ?? false
+    });
+    const scaleX = canvas.width / canvasRect.width;
+    const scaleY = canvas.height / canvasRect.height;
+    return {
+      x: (videoRect.left - canvasRect.left + fitRect.x) * scaleX,
+      y: (videoRect.top - canvasRect.top + fitRect.y) * scaleY,
+      width: fitRect.width * scaleX,
+      height: fitRect.height * scaleY
+    };
+  }
+
+  /**
+   * @returns {number | undefined}
+   */
+  #mediaPoseDeltaMs() {
+    if (!this.poseFrame || this.surface?.sourceKind !== "live-camera") {
+      return undefined;
+    }
+    const mediaTimeMs = this.surface.currentTimeSeconds * 1000;
+    if (!Number.isFinite(mediaTimeMs) || !Number.isFinite(this.poseFrame.timestampMs)) {
+      return undefined;
+    }
+    return Math.round(mediaTimeMs - this.poseFrame.timestampMs);
   }
 
   /**
@@ -481,13 +597,58 @@ function positiveNumberOrUndefined(value) {
 
 /**
  * @param {NormalizedPoseFrame | undefined} poseFrame
- * @returns {{id: number, x: number, y: number, v: number}[]}
+ * @returns {AeroMediaPosePreviewLandmark[]}
  */
 function normalizePoseLandmarks(poseFrame) {
-  return (poseFrame?.landmarks ?? []).map((landmark, index) => ({
-    id: index,
-    x: landmark.x,
-    y: landmark.y,
-    v: landmark.confidence
-  }));
+  /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
+  const landmarksByName = new Map();
+  for (const landmark of poseFrame?.landmarks ?? []) {
+    const id = aeroPosePreviewLandmarkIds.get(landmark.name);
+    if (id === undefined) {
+      continue;
+    }
+    landmarksByName.set(landmark.name, {
+      id,
+      name: landmark.name,
+      x: landmark.x,
+      y: landmark.y,
+      v: landmark.confidence
+    });
+  }
+  return aeroPosePreviewLandmarkOrder
+    .map((name) => landmarksByName.get(name))
+    .filter(isPreviewLandmark);
+}
+
+/**
+ * @param {AeroMediaPosePreviewLandmark | undefined} landmark
+ * @returns {landmark is AeroMediaPosePreviewLandmark}
+ */
+function isPreviewLandmark(landmark) {
+  return Boolean(landmark);
+}
+
+/**
+ * @param {AeroMediaPosePreviewLandmark} previous
+ * @param {AeroMediaPosePreviewLandmark} next
+ * @returns {AeroMediaPosePreviewLandmark}
+ */
+function smoothLandmark(previous, next) {
+  return {
+    id: next.id,
+    name: next.name,
+    x: lerp(previous.x, next.x, aeroPosePreviewSmoothingAlpha),
+    y: lerp(previous.y, next.y, aeroPosePreviewSmoothingAlpha),
+    v: next.v
+  };
+}
+
+/**
+ * @param {number} start
+ * @param {number} end
+ * @param {number} alpha
+ * @returns {number}
+ */
+function lerp(start, end, alpha) {
+  return start + (end - start) * alpha;
 }
