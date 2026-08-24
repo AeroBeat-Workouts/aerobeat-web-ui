@@ -6,24 +6,38 @@
   "exports": {
     ".": "./src/index.js",
     "./elements/aero-button": "./src/elements/aero-button/aero-button.js",
+    "./elements/aero-media-pose-preview": "./src/elements/aero-media-pose-preview/aero-media-pose-preview.js",
     "./elements/aero-pose-flow-panel": "./src/elements/aero-pose-flow-panel/aero-pose-flow-panel.js",
     "./elements/aero-status-panel": "./src/elements/aero-status-panel/aero-status-panel.js",
     "./screens/aero-calibration-screen": "./src/screens/aero-calibration-screen/aero-calibration-screen.js"
   },
   "scripts": {
-    "check": "npm run check:jsdoc && npm run check:imports && npm run check:components && npm run check:console",
+    "check": "npm run check:jsdoc && npm run check:imports && npm run check:components && npm run check:console && npm run check:preview",
     "check:jsdoc": "node scripts/validate-jsdoc-no-any.js",
     "check:imports": "node scripts/validate-public-imports.js",
     "check:components": "node scripts/validate-component-rules.js",
     "check:console": "node scripts/validate-playwright-console-noise.js",
+    "check:preview": "node scripts/validate-media-pose-preview-browser.js",
     "test": "npm run check",
-    "test:browser": "npm run check:console",
+    "test:browser": "npm run check:console && npm run check:preview",
     "demo": "npm --prefix .testbed run demo",
     "testbed:serve": "npm --prefix .testbed run serve",
     "testbed:link-self": "node scripts/link-testbed-self.js"
   },
+  "dependencies": {
+    "@aerobeat/web-contracts": "file:../aerobeat-web-contracts",
+    "@aerobeat/web-renderer": "file:../aerobeat-web-renderer",
+    "@aerobeat/web-style": "file:../aerobeat-web-style",
+    "@aerobeat/web-video": "file:../aerobeat-web-video"
+  },
+  "devDependencies": {
+    "playwright": "^1.46.1",
+    "vite": "^8.2.2"
+  },
   "peerDependencies": {
     "@aerobeat/web-contracts": "0.0.0",
-    "@aerobeat/web-style": "0.0.0"
+    "@aerobeat/web-renderer": "0.0.0",
+    "@aerobeat/web-style": "0.0.0",
+    "@aerobeat/web-video": "0.0.0"
   }
 }

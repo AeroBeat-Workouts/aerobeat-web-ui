@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AeroBeat Media Pose Preview Validation</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        display: grid;
+        padding: 24px;
+        place-items: start center;
+      }
+
+      aero-media-pose-preview {
+        height: 360px;
+        width: 640px;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import { defineAeroUiElements } from "../../src/index.js";
+      import { aeroMediaPosePreviewDebugData } from "../debug-data/aero-media-pose-preview.debug-data.js";
+
+      defineAeroUiElements();
+
+      const preview = document.createElement("aero-media-pose-preview");
+      const calls = [];
+      const renderer = {
+        serviceId: "aero.renderer.webgl2",
+        attach(canvas) {
+          calls.push({ type: "attach", width: canvas.width, height: canvas.height });
+          return this.describe();
+        },
+        detach() {
+          calls.push({ type: "detach" });
+          return this.describe();
+        },
+        describe() {
+          return {
+            serviceId: "aero.renderer.webgl2",
+            state: "running",
+            supported: true,
+            attached: true,
+            frameCount: calls.filter((call) => call.type === "clear").length,
+            drawCount: calls.filter((call) => call.type === "overlay").length,
+            viewportWidth: 640,
+            viewportHeight: 360,
+            errorMessage: undefined
+          };
+        },
+        clear(options = {}) {
+          calls.push({ type: "clear", options });
+          return { status: this.describe() };
+        },
+        renderFrame(options = {}) {
+          calls.push({ type: "frame", options });
+          return { status: this.describe() };
+        },
+        renderLandmarkOverlay(landmarks, options = {}) {
+          calls.push({
+            type: "overlay",
+            landmarks: landmarks.map((landmark) => ({ ...landmark })),
+            options: {
+              ...options,
+              surface: { ...options.surface },
+              connections: [...(options.connections ?? [])]
+            }
+          });
+          return {
+            status: this.describe(),
+            pointCount: landmarks.length,
+            lineVertexCount: 0
+          };
+        }
+      };
+
+      preview.setRenderer(renderer);
+      document.body.append(preview);
+      preview.setSurfaceDescriptor(aeroMediaPosePreviewDebugData.surface);
+      preview.setPoseFrame(aeroMediaPosePreviewDebugData.firstPoseFrame);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const firstSnapshot = preview.describePreview();
+      preview.setSurfaceDescriptor({
+        ...aeroMediaPosePreviewDebugData.surface,
+        fitMode: "cover",
+        mirrored: false
+      });
+      preview.setPoseFrame(aeroMediaPosePreviewDebugData.secondPoseFrame);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      window.__aeroPreviewValidation = {
+        firstSnapshot,
+        secondSnapshot: preview.describePreview(),
+        calls,
+        video: {
+          fitMode: preview.shadowRoot.querySelector("video").dataset.fitMode,
+          mirrored: preview.shadowRoot.querySelector("video").dataset.mirrored,
+          sourceKind: preview.shadowRoot.querySelector("video").dataset.sourceKind,
+          sourceId: preview.shadowRoot.querySelector("video").dataset.sourceId
+        },
+        canvas: {
+          width: preview.shadowRoot.querySelector("canvas").width,
+          height: preview.shadowRoot.querySelector("canvas").height,
+          landmarkCount: preview.shadowRoot.querySelector("canvas").dataset.landmarkCount,
+          contentRect: JSON.parse(preview.shadowRoot.querySelector("canvas").dataset.contentRect)
+        }
+      };
+    </script>
+  </body>
+</html>

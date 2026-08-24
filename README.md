@@ -12,12 +12,15 @@ It does not own style tokens, camera/CV logic, input routing, gameplay scoring, 
 
 - `src/index.js` registers and exports starter UI components.
 - `src/elements/aero-button/aero-button.js` defines a reusable command component.
+- `src/elements/aero-media-pose-preview/aero-media-pose-preview.js` composes public `@aerobeat/web-video` media surfaces with public `@aerobeat/web-renderer` WebGL2 pose overlays.
 - `src/elements/aero-status-panel/aero-status-panel.js` defines a reusable status surface for proving scenes.
 - `src/screens/aero-calibration-screen/aero-calibration-screen.js` composes visible UI from `aero-*` components only.
 
 ## Adjacent Repos
 
 - `aerobeat-web-style` owns theme tokens consumed by components.
+- `aerobeat-web-video` owns camera/video/replay media lifecycle and surface metadata consumed by preview presenters.
+- `aerobeat-web-renderer` owns durable WebGL2 landmark/skeleton drawing consumed by preview presenters.
 - `aerobeat-web-cv` owns camera/CV service data shown by calibration components.
 - `aerobeat-web-input` owns routed input event data shown by proving scenes.
 - `aerobeat-web-assembly` wires screens and services into the product shell.
@@ -50,7 +53,7 @@ npm test
 npm run test:browser
 ```
 
-The current validators are placeholder-level checks for JSDoc/no-escape posture, public import boundaries, component-only scenes, and console-noise expectations.
+The current validators check JSDoc/no-escape posture, public import boundaries, component-only scenes, console-noise expectations, and the media pose preview browser composition path for feed visibility, fit/mirror metadata, and updating renderer overlay calls.
 
 ## Documentation Handoff
 
