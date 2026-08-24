@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>aero-pose-flow-panel scene</title>
+    <script type="module">
+      import { defineAeroPoseFlowPanel } from "@aerobeat/web-this-repo";
+      import { aeroPoseFlowPanelDebugState } from "../debug-data/aero-pose-flow-panel.debug-data.js";
+
+      defineAeroPoseFlowPanel();
+
+      const panel = document.querySelector("aero-pose-flow-panel");
+      if (panel) {
+        panel.setProvingState(aeroPoseFlowPanelDebugState);
+      }
+    </script>
+  </head>
+  <body>
+    <aero-pose-flow-panel></aero-pose-flow-panel>
+  </body>
+</html>

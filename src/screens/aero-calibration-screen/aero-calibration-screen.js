@@ -1,6 +1,7 @@
 // @ts-check
 
 import { defineAeroButton } from "../../elements/aero-button/aero-button.js";
+import { defineAeroPoseFlowPanel } from "../../elements/aero-pose-flow-panel/aero-pose-flow-panel.js";
 import { defineAeroStatusPanel } from "../../elements/aero-status-panel/aero-status-panel.js";
 
 /**
@@ -13,6 +14,7 @@ export class AeroCalibrationScreen extends HTMLElement {
   constructor() {
     super();
     defineAeroButton();
+    defineAeroPoseFlowPanel();
     defineAeroStatusPanel();
     const root = this.attachShadow({ mode: "open" });
     root.innerHTML = `
@@ -33,6 +35,11 @@ export class AeroCalibrationScreen extends HTMLElement {
       </style>
       <div class="layout">
         <aero-status-panel heading="Camera calibration" status="Waiting for live, video, or replay pose feed"></aero-status-panel>
+        <aero-pose-flow-panel
+          source-id="aero.movenet.replay.basic-upper-body"
+          timestamp-ms="0"
+          input-summary="boxing straight_left | boxing straight_right | boxing guard_enabled"
+        ></aero-pose-flow-panel>
         <aero-button label="Begin calibration"></aero-button>
       </div>
     `;

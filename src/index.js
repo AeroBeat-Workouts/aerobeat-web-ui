@@ -1,10 +1,12 @@
 // @ts-check
 
 import { AeroButton, defineAeroButton } from "./elements/aero-button/aero-button.js";
+import { AeroPoseFlowPanel, defineAeroPoseFlowPanel } from "./elements/aero-pose-flow-panel/aero-pose-flow-panel.js";
 import { AeroStatusPanel, defineAeroStatusPanel } from "./elements/aero-status-panel/aero-status-panel.js";
 import { AeroCalibrationScreen, defineAeroCalibrationScreen } from "./screens/aero-calibration-screen/aero-calibration-screen.js";
 
 export { AeroButton, defineAeroButton } from "./elements/aero-button/aero-button.js";
+export { AeroPoseFlowPanel, defineAeroPoseFlowPanel } from "./elements/aero-pose-flow-panel/aero-pose-flow-panel.js";
 export { AeroStatusPanel, defineAeroStatusPanel } from "./elements/aero-status-panel/aero-status-panel.js";
 export { AeroCalibrationScreen, defineAeroCalibrationScreen } from "./screens/aero-calibration-screen/aero-calibration-screen.js";
 
@@ -15,6 +17,7 @@ export { AeroCalibrationScreen, defineAeroCalibrationScreen } from "./screens/ae
  */
 export function defineAeroUiElements() {
   defineAeroButton();
+  defineAeroPoseFlowPanel();
   defineAeroStatusPanel();
   defineAeroCalibrationScreen();
 }
@@ -24,12 +27,14 @@ export function defineAeroUiElements() {
  *
  * @type {Readonly<{
  *   aeroButton: typeof AeroButton,
+ *   aeroPoseFlowPanel: typeof AeroPoseFlowPanel,
  *   aeroStatusPanel: typeof AeroStatusPanel,
  *   aeroCalibrationScreen: typeof AeroCalibrationScreen
  * }>}
  */
 export const aeroUiConstructors = Object.freeze({
   aeroButton: AeroButton,
+  aeroPoseFlowPanel: AeroPoseFlowPanel,
   aeroStatusPanel: AeroStatusPanel,
   aeroCalibrationScreen: AeroCalibrationScreen
 });
