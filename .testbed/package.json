@@ -1,0 +1,12 @@
+{
+  "name": "@aerobeat/web-ui-testbed",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "echo \"Add a repo-local Vite or static demo command when UI scenes need serving.\"",
+    "serve": "echo \"Define host, port, cache busting, QR/link output, served roots, and secure-context handling before remote UI validation.\"",
+    "test": "echo \"Add Web Component tests as component behavior grows.\"",
+    "test:browser": "echo \"Add Playwright browser tests for component scenes.\""
+  }
+}
