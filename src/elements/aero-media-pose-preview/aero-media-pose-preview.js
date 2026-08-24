@@ -13,6 +13,7 @@ import {
  */
 export const aeroPosePreviewSkeletonConnections = Object.freeze([
   Object.freeze([0, 5]),
+  Object.freeze([0, 6]),
   Object.freeze([5, 6]),
   Object.freeze([5, 7]),
   Object.freeze([7, 9]),
@@ -49,11 +50,18 @@ const aeroPosePreviewLandmarkOrder = Object.freeze([
 ]);
 
 /**
- * Exponential smoothing weight for fresh landmark samples.
- *
- * @type {number}
+ * @typedef {"smoother" | "fast"} AeroMediaPosePreviewTrackingProfile
  */
-const aeroPosePreviewSmoothingAlpha = 0.42;
+
+/**
+ * Preview tracking profiles for phone readability versus latency checks.
+ *
+ * @type {Readonly<Record<AeroMediaPosePreviewTrackingProfile, { alpha: number }>>}
+ */
+const aeroPosePreviewTrackingProfiles = Object.freeze({
+  smoother: Object.freeze({ alpha: 0.42 }),
+  fast: Object.freeze({ alpha: 1 })
+});
 
 /**
  * @typedef {import("@aerobeat/web-contracts").NormalizedPoseFrame} NormalizedPoseFrame
@@ -106,6 +114,7 @@ const aeroPosePreviewSmoothingAlpha = 0.42;
  * @property {boolean} mirrored Whether the player-facing preview is mirrored.
  * @property {number} landmarkCount Number of landmarks submitted to the overlay.
  * @property {number} rendererDrawCount Current renderer draw count.
+ * @property {AeroMediaPosePreviewTrackingProfile} trackingProfile Active preview smoothing profile.
  * @property {{x: number, y: number, width: number, height: number}} contentRect Fitted content rectangle.
  * @property {number | undefined} mediaPoseDeltaMs Media time minus pose timestamp, when both are comparable.
  */
@@ -141,7 +150,7 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {string[]}
    */
   static get observedAttributes() {
-    return ["fit-mode", "mirrored", "source-id", "source-kind"];
+    return ["fit-mode", "mirrored", "source-id", "source-kind", "tracking-profile"];
   }
 
   /**
@@ -163,6 +172,8 @@ export class AeroMediaPosePreview extends HTMLElement {
     this.lastSmoothedFrameKey = "";
     /** @type {string} */
     this.lastSmoothedSourceId = "";
+    /** @type {AeroMediaPosePreviewTrackingProfile} */
+    this.trackingProfile = "smoother";
     /** @type {ResizeObserver | undefined} */
     this.resizeObserver = undefined;
     const root = this.attachShadow({ mode: "open" });
@@ -336,6 +347,24 @@ export class AeroMediaPosePreview extends HTMLElement {
   }
 
   /**
+   * Selects how aggressively preview landmarks smooth incoming pose frames.
+   *
+   * @param {AeroMediaPosePreviewTrackingProfile | string | undefined} profile
+   * @returns {void}
+   */
+  setTrackingProfile(profile) {
+    const nextProfile = normalizeTrackingProfile(profile);
+    if (nextProfile === this.trackingProfile) {
+      return;
+    }
+    this.trackingProfile = nextProfile;
+    this.smoothedLandmarks = new Map();
+    this.lastSmoothedFrameKey = "";
+    this.setAttribute("tracking-profile", nextProfile);
+    this.renderPreview();
+  }
+
+  /**
    * Renders the current pose frame over the current media content rect.
    *
    * @returns {AeroMediaPosePreviewSnapshot}
@@ -356,6 +385,7 @@ export class AeroMediaPosePreview extends HTMLElement {
     const canvas = this.#canvasElement();
     canvas.dataset.landmarkCount = String(landmarks.length);
     canvas.dataset.rendererDrawCount = String(result.status.drawCount);
+    canvas.dataset.trackingProfile = this.trackingProfile;
     canvas.dataset.contentRect = JSON.stringify(computeMediaContentRect(surface));
     canvas.dataset.mediaPoseDeltaMs = String(this.#mediaPoseDeltaMs() ?? "");
     return this.describePreview();
@@ -376,6 +406,7 @@ export class AeroMediaPosePreview extends HTMLElement {
       mirrored: surface.mirrored ?? false,
       landmarkCount: this.#visiblePoseLandmarks().length,
       rendererDrawCount: rendererStatus.drawCount,
+      trackingProfile: this.trackingProfile,
       contentRect: computeMediaContentRect(surface),
       mediaPoseDeltaMs: this.#mediaPoseDeltaMs()
     };
@@ -434,6 +465,12 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {void}
    */
   #syncAttributesToSurface() {
+    const nextTrackingProfile = normalizeTrackingProfile(this.getAttribute("tracking-profile") ?? this.trackingProfile);
+    if (nextTrackingProfile !== this.trackingProfile) {
+      this.trackingProfile = nextTrackingProfile;
+      this.smoothedLandmarks = new Map();
+      this.lastSmoothedFrameKey = "";
+    }
     this.surface = normalizeSurface({
       ...this.surface,
       sourceKind: this.getAttribute("source-kind") ?? this.surface?.sourceKind,
@@ -488,9 +525,10 @@ export class AeroMediaPosePreview extends HTMLElement {
       const rawLandmarks = normalizePoseLandmarks(this.poseFrame);
       /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
       const nextSmoothed = new Map();
+      const smoothingAlpha = aeroPosePreviewTrackingProfiles[this.trackingProfile].alpha;
       for (const landmark of rawLandmarks) {
         const previous = this.smoothedLandmarks.get(landmark.name);
-        nextSmoothed.set(landmark.name, previous ? smoothLandmark(previous, landmark) : landmark);
+        nextSmoothed.set(landmark.name, previous ? smoothLandmark(previous, landmark, smoothingAlpha) : landmark);
       }
       this.smoothedLandmarks = nextSmoothed;
       this.lastSmoothedFrameKey = frameKey;
@@ -588,6 +626,14 @@ function normalizeFitMode(value) {
 }
 
 /**
+ * @param {string | undefined} value
+ * @returns {AeroMediaPosePreviewTrackingProfile}
+ */
+function normalizeTrackingProfile(value) {
+  return value === "fast" ? "fast" : "smoother";
+}
+
+/**
  * @param {number | undefined} value
  * @returns {number | undefined}
  */
@@ -631,14 +677,15 @@ function isPreviewLandmark(landmark) {
 /**
  * @param {AeroMediaPosePreviewLandmark} previous
  * @param {AeroMediaPosePreviewLandmark} next
+ * @param {number} alpha
  * @returns {AeroMediaPosePreviewLandmark}
  */
-function smoothLandmark(previous, next) {
+function smoothLandmark(previous, next, alpha) {
   return {
     id: next.id,
     name: next.name,
-    x: lerp(previous.x, next.x, aeroPosePreviewSmoothingAlpha),
-    y: lerp(previous.y, next.y, aeroPosePreviewSmoothingAlpha),
+    x: lerp(previous.x, next.x, alpha),
+    y: lerp(previous.y, next.y, alpha),
     v: next.v
   };
 }

@@ -87,6 +87,7 @@
       preview.setPoseFrame(aeroMediaPosePreviewDebugData.firstPoseFrame);
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const firstSnapshot = preview.describePreview();
+      preview.setTrackingProfile("smoother");
       preview.setSurfaceDescriptor({
         ...aeroMediaPosePreviewDebugData.surface,
         fitMode: "cover",
@@ -94,9 +95,17 @@
       });
       preview.setPoseFrame(aeroMediaPosePreviewDebugData.secondPoseFrame);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      const smootherSnapshot = preview.describePreview();
+      preview.setTrackingProfile("fast");
+      preview.setPoseFrame({
+        ...aeroMediaPosePreviewDebugData.secondPoseFrame,
+        timestampMs: aeroMediaPosePreviewDebugData.secondPoseFrame.timestampMs + 1
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
 
       window.__aeroPreviewValidation = {
         firstSnapshot,
+        smootherSnapshot,
         secondSnapshot: preview.describePreview(),
         calls,
         video: {
@@ -109,6 +118,7 @@
           width: preview.shadowRoot.querySelector("canvas").width,
           height: preview.shadowRoot.querySelector("canvas").height,
           landmarkCount: preview.shadowRoot.querySelector("canvas").dataset.landmarkCount,
+          trackingProfile: preview.shadowRoot.querySelector("canvas").dataset.trackingProfile,
           mediaPoseDeltaMs: preview.shadowRoot.querySelector("canvas").dataset.mediaPoseDeltaMs,
           contentRect: JSON.parse(preview.shadowRoot.querySelector("canvas").dataset.contentRect)
         }

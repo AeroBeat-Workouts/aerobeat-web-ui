@@ -14,6 +14,7 @@ It does not own style tokens, camera/CV logic, input routing, gameplay scoring, 
 - `src/elements/aero-button/aero-button.js` defines a reusable command component.
 - `src/elements/aero-media-pose-preview/aero-media-pose-preview.js` composes public `@aerobeat/web-video` media surfaces with public `@aerobeat/web-renderer` WebGL2 pose overlays.
 - `src/elements/aero-status-panel/aero-status-panel.js` defines a reusable status surface for proving scenes.
+- `src/elements/aero-select/aero-select.js` defines a reusable compact dropdown for phone-test settings.
 - `src/screens/aero-calibration-screen/aero-calibration-screen.js` composes visible UI from `aero-*` components only.
 
 ## Adjacent Repos

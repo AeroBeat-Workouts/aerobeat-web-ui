@@ -8,6 +8,7 @@
     "./elements/aero-button": "./src/elements/aero-button/aero-button.js",
     "./elements/aero-media-pose-preview": "./src/elements/aero-media-pose-preview/aero-media-pose-preview.js",
     "./elements/aero-pose-flow-panel": "./src/elements/aero-pose-flow-panel/aero-pose-flow-panel.js",
+    "./elements/aero-select": "./src/elements/aero-select/aero-select.js",
     "./elements/aero-status-panel": "./src/elements/aero-status-panel/aero-status-panel.js",
     "./screens/aero-calibration-screen": "./src/screens/aero-calibration-screen/aero-calibration-screen.js"
   },

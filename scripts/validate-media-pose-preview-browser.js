@@ -55,14 +55,24 @@ try {
   assert(validation.video.sourceId === "aero.video.live-camera", "Video element did not retain source id metadata.");
   assert(validation.firstSnapshot.fitMode === "contain", "First preview snapshot did not preserve contain fit mode.");
   assert(validation.firstSnapshot.mirrored === true, "First preview snapshot did not preserve mirrored state.");
-  assert(validation.secondSnapshot.fitMode === "cover", "Second preview snapshot did not preserve cover fit mode.");
-  assert(validation.secondSnapshot.mirrored === false, "Second preview snapshot did not preserve unmirrored state.");
+  assert(validation.smootherSnapshot.fitMode === "cover", "Smoother preview snapshot did not preserve cover fit mode.");
+  assert(validation.smootherSnapshot.mirrored === false, "Smoother preview snapshot did not preserve unmirrored state.");
+  assert(validation.smootherSnapshot.trackingProfile === "smoother", "Smoother preview snapshot did not preserve tracking profile.");
+  assert(validation.secondSnapshot.fitMode === "cover", "Fast preview snapshot did not preserve cover fit mode.");
+  assert(validation.secondSnapshot.mirrored === false, "Fast preview snapshot did not preserve unmirrored state.");
+  assert(validation.secondSnapshot.trackingProfile === "fast", "Fast preview snapshot did not preserve tracking profile.");
 
   const overlayCalls = validation.calls.filter((call) => call.type === "overlay" && call.landmarks.length > 0);
   assert(overlayCalls.length >= 2, "Renderer overlay was not called for both pose frames.");
   const firstOverlay = overlayCalls.find((call) => call.options.surface.fitMode === "contain");
+  const smootherOverlay = overlayCalls.find((call) => {
+    const wristX = call.landmarks[1]?.x ?? 0;
+    return call.options.surface.fitMode === "cover" && wristX > 0.22 && wristX < 0.42;
+  });
   const secondOverlay = overlayCalls.at(-1);
   assert(Boolean(firstOverlay), "Renderer overlay was not called with the first contain surface.");
+  assert(Boolean(smootherOverlay), "Renderer overlay was not called with the smoother cover surface.");
+  assert(Boolean(secondOverlay), "Renderer overlay was not called with the fast cover surface.");
   assert(firstOverlay.options.surface.fitMode === "contain", "First overlay call did not receive contain fit mode.");
   assert(firstOverlay.options.surface.mirrored === true, "First overlay call did not receive mirrored surface metadata.");
   assert(secondOverlay.options.surface.fitMode === "cover", "Second overlay call did not receive cover fit mode.");
@@ -73,14 +83,16 @@ try {
     JSON.stringify(secondOverlay.landmarks.map((landmark) => landmark.id)) === JSON.stringify([0, 9, 7, 5, 6, 8, 10]),
     "Renderer overlay did not receive stable MoveNet IDs for the requested testing subset."
   );
+  assert(secondOverlay.landmarks[1].x === 0.42, "Fast tracking profile did not use the latest left wrist sample directly.");
+  assert(secondOverlay.options.connections.length === 7, "Renderer overlay did not receive the upper-body skeleton connections.");
   assert(
-    secondOverlay.landmarks[1].x > 0.22 && secondOverlay.landmarks[1].x < 0.42,
-    "Renderer overlay did not smooth the left wrist between the previous and latest frame."
+    secondOverlay.options.connections.some((connection) => connection[0] === 0 && connection[1] === 6),
+    "Renderer overlay did not connect the nose to the right shoulder."
   );
-  assert(secondOverlay.options.connections.length === 6, "Renderer overlay did not receive the upper-body skeleton connections.");
+  assert(validation.canvas.trackingProfile === "fast", "Overlay canvas did not expose the selected tracking profile.");
   assert(approximatelyEqual(validation.canvas.contentRect.width, 640), "Cover content rect width was not mapped over the visible feed.");
   assert(approximatelyEqual(validation.canvas.contentRect.height, 360), "Cover content rect height was not mapped over the visible feed.");
-  assert(validation.canvas.mediaPoseDeltaMs === "-50", "Preview did not expose comparable media/pose delta metadata.");
+  assert(validation.canvas.mediaPoseDeltaMs === "-51", "Preview did not expose comparable media/pose delta metadata.");
 } finally {
   await browser.close();
   await server.close();
