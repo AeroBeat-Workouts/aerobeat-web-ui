@@ -1,6 +1,18 @@
 // @ts-check
 
 /**
+ * @typedef {Object} AeroButtonActivateDetail
+ * @property {string} label Visible command label when activation occurred.
+ */
+
+/**
+ * Public command event dispatched by `aero-button` after native activation.
+ *
+ * @type {"aero-button-activate"}
+ */
+export const aeroButtonActivateEventName = "aero-button-activate";
+
+/**
  * Frutiger Aero command button Web Component.
  */
 export class AeroButton extends HTMLElement {
@@ -10,7 +22,7 @@ export class AeroButton extends HTMLElement {
    * @returns {string[]}
    */
   static get observedAttributes() {
-    return ["label", "variant"];
+    return ["disabled", "label", "variant"];
   }
 
   /**
@@ -47,8 +59,11 @@ export class AeroButton extends HTMLElement {
           outline-offset: 2px;
         }
       </style>
-      <span class="control" part="control"></span>
+      <button class="control" part="control" type="button"></button>
     `;
+    root.querySelector(".control")?.addEventListener("click", () => {
+      this.#dispatchActivateEvent();
+    });
   }
 
   /**
@@ -69,10 +84,29 @@ export class AeroButton extends HTMLElement {
    * Updates the visible control text.
    */
   #render() {
-    const control = this.shadowRoot?.querySelector(".control");
+    const control = this.shadowRoot?.querySelector("button.control");
     if (control) {
       control.textContent = this.getAttribute("label") ?? "Continue";
+      control.disabled = this.hasAttribute("disabled");
     }
+  }
+
+  /**
+   * Dispatches the public activation event for consumers that avoid private shadow DOM coupling.
+   *
+   * @returns {void}
+   */
+  #dispatchActivateEvent() {
+    /** @type {AeroButtonActivateDetail} */
+    const detail = {
+      label: this.getAttribute("label") ?? "Continue"
+    };
+
+    this.dispatchEvent(new CustomEvent(aeroButtonActivateEventName, {
+      bubbles: true,
+      composed: true,
+      detail
+    }));
   }
 }
 
