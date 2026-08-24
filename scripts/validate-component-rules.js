@@ -1,7 +1,7 @@
 // @ts-check
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /**
  * @param {string} path
@@ -23,6 +23,8 @@ function collectFiles(path) {
 }
 
 const failures = [];
+const scenesRoot = ".testbed/scenes";
+const debugDataRoot = ".testbed/debug-data";
 const roots = ["src/screens", ".testbed/scenes"].filter((path) => {
   try {
     return statSync(path).isDirectory();
@@ -38,6 +40,27 @@ for (const root of roots) {
       failures.push(`${file}: visible controls must be named aero-* Web Components`);
     }
   }
+}
+
+try {
+  if (statSync(scenesRoot).isDirectory()) {
+    for (const file of collectFiles(scenesRoot)) {
+      if (!file.endsWith(".scene.html")) {
+        continue;
+      }
+      const sceneName = basename(file, ".scene.html");
+      const debugDataPath = join(debugDataRoot, `${sceneName}.debug-data.js`);
+      try {
+        if (!statSync(debugDataPath).isFile()) {
+          failures.push(`${file}: expected representative debug data at ${debugDataPath}`);
+        }
+      } catch {
+        failures.push(`${file}: expected representative debug data at ${debugDataPath}`);
+      }
+    }
+  }
+} catch {
+  // Repos without testbed scenes have nothing to pair.
 }
 
 if (failures.length > 0) {
