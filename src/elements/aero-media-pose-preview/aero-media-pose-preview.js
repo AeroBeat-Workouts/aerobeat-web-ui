@@ -324,26 +324,32 @@ export class AeroMediaPosePreview extends HTMLElement {
    * Updates public surface metadata already described by the video facade.
    *
    * @param {Partial<AeroMediaPosePreviewSurface>} surface
+   * @param {{ render?: boolean }} [options]
    * @returns {void}
    */
-  setSurfaceDescriptor(surface) {
+  setSurfaceDescriptor(surface, options = {}) {
     this.surface = normalizeSurface({
       ...this.surface,
       ...surface
     });
     this.#applySurfaceToMedia();
-    this.renderPreview();
+    if (options.render !== false) {
+      this.renderPreview();
+    }
   }
 
   /**
    * Updates the pose frame drawn by the renderer overlay.
    *
    * @param {NormalizedPoseFrame | undefined} poseFrame
+   * @param {{ render?: boolean }} [options]
    * @returns {void}
    */
-  setPoseFrame(poseFrame) {
+  setPoseFrame(poseFrame, options = {}) {
     this.poseFrame = poseFrame;
-    this.renderPreview();
+    if (options.render !== false) {
+      this.renderPreview();
+    }
   }
 
   /**
