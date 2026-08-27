@@ -65,6 +65,7 @@ const aeroPosePreviewTrackingProfiles = Object.freeze({
 
 /**
  * @typedef {import("@aerobeat/web-contracts").NormalizedPoseFrame} NormalizedPoseFrame
+ * @typedef {import("@aerobeat/web-contracts").AeroPoseRoutingSample} AeroPoseRoutingSample
  * @typedef {import("@aerobeat/web-video").createBrowserVideoMediaFacade} CreateBrowserVideoMediaFacade
  */
 
@@ -116,7 +117,11 @@ const aeroPosePreviewTrackingProfiles = Object.freeze({
  * @property {number} rendererDrawCount Current renderer draw count.
  * @property {AeroMediaPosePreviewTrackingProfile} trackingProfile Active preview smoothing profile.
  * @property {{x: number, y: number, width: number, height: number}} contentRect Fitted content rectangle.
- * @property {number | undefined} mediaPoseDeltaMs Media time minus pose timestamp, when both are comparable.
+ * @property {number | undefined} mediaPoseDeltaMs Media time minus latest real measurement timestamp, when comparable.
+ * @property {number | undefined} presentationTargetDeltaMs Media time minus the routed presentation target, when comparable.
+ * @property {import("@aerobeat/web-contracts").AeroPoseSampleProvenance | undefined} poseProvenance Measured or predicted overlay source.
+ * @property {number | undefined} measurementTimestampMs Latest real measurement timestamp.
+ * @property {number | undefined} predictionHorizonMs Current bounded prediction horizon.
  */
 
 /**
@@ -166,6 +171,8 @@ export class AeroMediaPosePreview extends HTMLElement {
     this.surface = undefined;
     /** @type {NormalizedPoseFrame | undefined} */
     this.poseFrame = undefined;
+    /** @type {AeroPoseRoutingSample | undefined} */
+    this.poseRoutingSample = undefined;
     /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
     this.smoothedLandmarks = new Map();
     /** @type {string} */
@@ -328,10 +335,14 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {void}
    */
   setSurfaceDescriptor(surface, options = {}) {
+    const previousSurface = this.surface;
     this.surface = normalizeSurface({
       ...this.surface,
       ...surface
     });
+    if (hasPresentationSurfaceChanged(previousSurface, this.surface)) {
+      this.#resetSmoothingState();
+    }
     this.#applySurfaceToMedia();
     if (options.render !== false) {
       this.renderPreview();
@@ -346,7 +357,40 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {void}
    */
   setPoseFrame(poseFrame, options = {}) {
+    const previousSourceId = this.poseRoutingSample?.sourceId ?? this.poseFrame?.sourceId;
+    const crossedRoutingBoundary = Boolean(this.poseRoutingSample);
+    this.poseRoutingSample = undefined;
     this.poseFrame = poseFrame;
+    if (!poseFrame || crossedRoutingBoundary || previousSourceId !== poseFrame.sourceId) {
+      this.#resetSmoothingState();
+    }
+    if (options.render !== false) {
+      this.renderPreview();
+    }
+  }
+
+  /**
+   * Updates the overlay from a truthfully tagged gameplay-routing sample without
+   * exposing the estimate as measured adapter output.
+   *
+   * @param {AeroPoseRoutingSample | undefined} sample
+   * @param {{ render?: boolean }} [options]
+   * @returns {void}
+   */
+  setPoseRoutingSample(sample, options = {}) {
+    const previousSample = this.poseRoutingSample;
+    const crossedMeasuredFrameBoundary = Boolean(this.poseFrame);
+    this.poseFrame = undefined;
+    this.poseRoutingSample = sample;
+    if (
+      !sample
+      || crossedMeasuredFrameBoundary
+      || previousSample?.sourceId !== sample.sourceId
+      || previousSample?.routeEpoch !== sample.routeEpoch
+      || previousSample?.provenance !== sample.provenance
+    ) {
+      this.#resetSmoothingState();
+    }
     if (options.render !== false) {
       this.renderPreview();
     }
@@ -364,8 +408,7 @@ export class AeroMediaPosePreview extends HTMLElement {
       return;
     }
     this.trackingProfile = nextProfile;
-    this.smoothedLandmarks = new Map();
-    this.lastSmoothedFrameKey = "";
+    this.#resetSmoothingState();
     this.setAttribute("tracking-profile", nextProfile);
     this.renderPreview();
   }
@@ -394,6 +437,10 @@ export class AeroMediaPosePreview extends HTMLElement {
     canvas.dataset.trackingProfile = this.trackingProfile;
     canvas.dataset.contentRect = JSON.stringify(computeMediaContentRect(surface));
     canvas.dataset.mediaPoseDeltaMs = String(this.#mediaPoseDeltaMs() ?? "");
+    canvas.dataset.presentationTargetDeltaMs = String(this.#presentationTargetDeltaMs() ?? "");
+    canvas.dataset.poseProvenance = this.poseRoutingSample?.provenance ?? (this.poseFrame ? "measured" : "");
+    canvas.dataset.measurementTimestampMs = String(this.#measurementTimestampMs() ?? "");
+    canvas.dataset.predictionHorizonMs = String(this.poseRoutingSample?.predictionHorizonMs ?? (this.poseFrame ? 0 : ""));
     return this.describePreview();
   }
 
@@ -414,7 +461,11 @@ export class AeroMediaPosePreview extends HTMLElement {
       rendererDrawCount: rendererStatus.drawCount,
       trackingProfile: this.trackingProfile,
       contentRect: computeMediaContentRect(surface),
-      mediaPoseDeltaMs: this.#mediaPoseDeltaMs()
+      mediaPoseDeltaMs: this.#mediaPoseDeltaMs(),
+      presentationTargetDeltaMs: this.#presentationTargetDeltaMs(),
+      poseProvenance: this.poseRoutingSample?.provenance ?? (this.poseFrame ? "measured" : undefined),
+      measurementTimestampMs: this.#measurementTimestampMs(),
+      predictionHorizonMs: this.poseRoutingSample?.predictionHorizonMs ?? (this.poseFrame ? 0 : undefined)
     };
   }
 
@@ -471,11 +522,11 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {void}
    */
   #syncAttributesToSurface() {
+    const previousSurface = this.surface;
     const nextTrackingProfile = normalizeTrackingProfile(this.getAttribute("tracking-profile") ?? this.trackingProfile);
     if (nextTrackingProfile !== this.trackingProfile) {
       this.trackingProfile = nextTrackingProfile;
-      this.smoothedLandmarks = new Map();
-      this.lastSmoothedFrameKey = "";
+      this.#resetSmoothingState();
     }
     this.surface = normalizeSurface({
       ...this.surface,
@@ -486,6 +537,9 @@ export class AeroMediaPosePreview extends HTMLElement {
         ? this.getAttribute("mirrored") !== "false"
         : this.surface?.mirrored
     });
+    if (hasPresentationSurfaceChanged(previousSurface, this.surface)) {
+      this.#resetSmoothingState();
+    }
     this.#applySurfaceToMedia();
   }
 
@@ -522,13 +576,19 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {AeroMediaPosePreviewLandmark[]}
    */
   #visiblePoseLandmarks() {
-    const sourceId = this.poseFrame?.sourceId ?? "none";
-    const frameKey = `${sourceId}:${this.poseFrame?.timestampMs ?? -1}`;
+    const presentation = this.poseRoutingSample ?? this.poseFrame;
+    const sourceId = presentation?.sourceId ?? "none";
+    const presentationSourceKey = this.poseRoutingSample
+      ? `routing:${this.poseRoutingSample.routeEpoch}:${this.poseRoutingSample.provenance}:${sourceId}`
+      : `measured-frame:${sourceId}`;
+    const frameKey = this.poseRoutingSample
+      ? `${presentationSourceKey}:${this.poseRoutingSample.targetTimestampMs}`
+      : `${presentationSourceKey}:${this.poseFrame?.timestampMs ?? -1}`;
     if (frameKey !== this.lastSmoothedFrameKey) {
-      if (sourceId !== this.lastSmoothedSourceId) {
+      if (presentationSourceKey !== this.lastSmoothedSourceId) {
         this.smoothedLandmarks = new Map();
       }
-      const rawLandmarks = normalizePoseLandmarks(this.poseFrame);
+      const rawLandmarks = normalizePoseLandmarks(presentation);
       /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
       const nextSmoothed = new Map();
       const smoothingAlpha = aeroPosePreviewTrackingProfiles[this.trackingProfile].alpha;
@@ -538,11 +598,22 @@ export class AeroMediaPosePreview extends HTMLElement {
       }
       this.smoothedLandmarks = nextSmoothed;
       this.lastSmoothedFrameKey = frameKey;
-      this.lastSmoothedSourceId = sourceId;
+      this.lastSmoothedSourceId = presentationSourceKey;
     }
     return aeroPosePreviewLandmarkOrder
       .map((name) => this.smoothedLandmarks.get(name))
       .filter(isPreviewLandmark);
+  }
+
+  /**
+   * Drops filter history at source, lifecycle, tracking, and provenance boundaries.
+   *
+   * @returns {void}
+   */
+  #resetSmoothingState() {
+    this.smoothedLandmarks = new Map();
+    this.lastSmoothedFrameKey = "";
+    this.lastSmoothedSourceId = "";
   }
 
   /**
@@ -578,14 +649,36 @@ export class AeroMediaPosePreview extends HTMLElement {
    * @returns {number | undefined}
    */
   #mediaPoseDeltaMs() {
-    if (!this.poseFrame || this.surface?.sourceKind !== "live-camera") {
+    const measurementTimestampMs = this.#measurementTimestampMs();
+    if (measurementTimestampMs === undefined || this.surface?.sourceKind !== "live-camera") {
       return undefined;
     }
     const mediaTimeMs = this.surface.currentTimeSeconds * 1000;
-    if (!Number.isFinite(mediaTimeMs) || !Number.isFinite(this.poseFrame.timestampMs)) {
+    if (!Number.isFinite(mediaTimeMs)) {
       return undefined;
     }
-    return Math.round(mediaTimeMs - this.poseFrame.timestampMs);
+    return Math.round(mediaTimeMs - measurementTimestampMs);
+  }
+
+  /**
+   * @returns {number | undefined}
+   */
+  #presentationTargetDeltaMs() {
+    if (!this.poseRoutingSample || this.surface?.sourceKind !== "live-camera") {
+      return undefined;
+    }
+    const mediaTimeMs = this.surface.currentTimeSeconds * 1000;
+    if (!Number.isFinite(mediaTimeMs) || !Number.isFinite(this.poseRoutingSample.targetTimestampMs)) {
+      return undefined;
+    }
+    return Math.round(mediaTimeMs - this.poseRoutingSample.targetTimestampMs);
+  }
+
+  /**
+   * @returns {number | undefined}
+   */
+  #measurementTimestampMs() {
+    return this.poseRoutingSample?.measurementTimestampMs ?? this.poseFrame?.timestampMs;
   }
 
   /**
@@ -624,6 +717,17 @@ function normalizeSurface(surface) {
 }
 
 /**
+ * @param {AeroMediaPosePreviewSurface | undefined} previous
+ * @param {AeroMediaPosePreviewSurface | undefined} next
+ * @returns {boolean}
+ */
+function hasPresentationSurfaceChanged(previous, next) {
+  return previous?.sourceKind !== next?.sourceKind
+    || previous?.sourceId !== next?.sourceId
+    || previous?.mirrored !== next?.mirrored;
+}
+
+/**
  * @param {string | undefined} value
  * @returns {AeroMediaPosePreviewFitMode}
  */
@@ -648,13 +752,13 @@ function positiveNumberOrUndefined(value) {
 }
 
 /**
- * @param {NormalizedPoseFrame | undefined} poseFrame
+ * @param {NormalizedPoseFrame | AeroPoseRoutingSample | undefined} poseSample
  * @returns {AeroMediaPosePreviewLandmark[]}
  */
-function normalizePoseLandmarks(poseFrame) {
+function normalizePoseLandmarks(poseSample) {
   /** @type {Map<string, AeroMediaPosePreviewLandmark>} */
   const landmarksByName = new Map();
-  for (const landmark of poseFrame?.landmarks ?? []) {
+  for (const landmark of poseSample?.landmarks ?? []) {
     const id = aeroPosePreviewLandmarkIds.get(landmark.name);
     if (id === undefined) {
       continue;

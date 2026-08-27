@@ -102,11 +102,60 @@
         timestampMs: aeroMediaPosePreviewDebugData.secondPoseFrame.timestampMs + 1
       });
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      const secondSnapshot = preview.describePreview();
+      const legacyCanvas = describeCanvas(preview);
+
+      preview.setTrackingProfile("smoother");
+      preview.setPoseRoutingSample({
+        schema: "aerobeat/pose_routing_sample",
+        version: 1,
+        sourceId: aeroMediaPosePreviewDebugData.secondPoseFrame.sourceId,
+        routeEpoch: "validation-route-1",
+        measuredSourceFrameId: "validation-route-1:1301",
+        targetTimestampMs: 1360,
+        measurementTimestampMs: 1301,
+        predictionHorizonMs: 59,
+        provenance: "predicted",
+        mirrored: false,
+        landmarks: aeroMediaPosePreviewDebugData.secondPoseFrame.landmarks.map((landmark) => (
+          landmark.name === "left_wrist" ? { ...landmark, x: 0.74 } : landmark
+        ))
+      });
+      const predictedSnapshot = preview.describePreview();
+      const predictedCanvas = describeCanvas(preview);
+
+      preview.setPoseRoutingSample({
+        schema: "aerobeat/pose_routing_sample",
+        version: 1,
+        sourceId: aeroMediaPosePreviewDebugData.secondPoseFrame.sourceId,
+        routeEpoch: "validation-route-1",
+        measuredSourceFrameId: "validation-route-1:1400",
+        targetTimestampMs: 1400,
+        measurementTimestampMs: 1400,
+        predictionHorizonMs: 0,
+        provenance: "measured",
+        mirrored: false,
+        landmarks: aeroMediaPosePreviewDebugData.secondPoseFrame.landmarks.map((landmark) => (
+          landmark.name === "left_wrist" ? { ...landmark, x: 0.12 } : landmark
+        ))
+      });
+      const measuredRoutingSnapshot = preview.describePreview();
+      const measuredRoutingOverlay = calls.filter((call) => call.type === "overlay" && call.landmarks.length > 0).at(-1);
+
+      preview.setPoseRoutingSample(undefined);
+      const clearedSnapshot = preview.describePreview();
+      const clearedCanvas = describeCanvas(preview);
 
       window.__aeroPreviewValidation = {
         firstSnapshot,
         smootherSnapshot,
-        secondSnapshot: preview.describePreview(),
+        secondSnapshot,
+        predictedSnapshot,
+        measuredRoutingSnapshot,
+        measuredRoutingOverlay,
+        clearedSnapshot,
+        predictedCanvas,
+        clearedCanvas,
         calls,
         video: {
           fitMode: preview.shadowRoot.querySelector("video").dataset.fitMode,
@@ -114,15 +163,24 @@
           sourceKind: preview.shadowRoot.querySelector("video").dataset.sourceKind,
           sourceId: preview.shadowRoot.querySelector("video").dataset.sourceId
         },
-        canvas: {
-          width: preview.shadowRoot.querySelector("canvas").width,
-          height: preview.shadowRoot.querySelector("canvas").height,
-          landmarkCount: preview.shadowRoot.querySelector("canvas").dataset.landmarkCount,
-          trackingProfile: preview.shadowRoot.querySelector("canvas").dataset.trackingProfile,
-          mediaPoseDeltaMs: preview.shadowRoot.querySelector("canvas").dataset.mediaPoseDeltaMs,
-          contentRect: JSON.parse(preview.shadowRoot.querySelector("canvas").dataset.contentRect)
-        }
+        canvas: legacyCanvas
       };
+
+      function describeCanvas(element) {
+        const canvas = element.shadowRoot.querySelector("canvas");
+        return {
+          width: canvas.width,
+          height: canvas.height,
+          landmarkCount: canvas.dataset.landmarkCount,
+          trackingProfile: canvas.dataset.trackingProfile,
+          mediaPoseDeltaMs: canvas.dataset.mediaPoseDeltaMs,
+          presentationTargetDeltaMs: canvas.dataset.presentationTargetDeltaMs,
+          poseProvenance: canvas.dataset.poseProvenance,
+          measurementTimestampMs: canvas.dataset.measurementTimestampMs,
+          predictionHorizonMs: canvas.dataset.predictionHorizonMs,
+          contentRect: JSON.parse(canvas.dataset.contentRect)
+        };
+      }
     </script>
   </body>
 </html>

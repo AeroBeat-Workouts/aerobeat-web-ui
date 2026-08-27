@@ -69,7 +69,9 @@ try {
     const wristX = call.landmarks[1]?.x ?? 0;
     return call.options.surface.fitMode === "cover" && wristX > 0.22 && wristX < 0.42;
   });
-  const secondOverlay = overlayCalls.at(-1);
+  const secondOverlay = overlayCalls.find((call) => (
+    call.options.surface.fitMode === "cover" && call.landmarks[1]?.x === 0.42
+  ));
   assert(Boolean(firstOverlay), "Renderer overlay was not called with the first contain surface.");
   assert(Boolean(smootherOverlay), "Renderer overlay was not called with the smoother cover surface.");
   assert(Boolean(secondOverlay), "Renderer overlay was not called with the fast cover surface.");
@@ -92,7 +94,31 @@ try {
   assert(validation.canvas.trackingProfile === "fast", "Overlay canvas did not expose the selected tracking profile.");
   assert(approximatelyEqual(validation.canvas.contentRect.width, 640), "Cover content rect width was not mapped over the visible feed.");
   assert(approximatelyEqual(validation.canvas.contentRect.height, 360), "Cover content rect height was not mapped over the visible feed.");
-  assert(validation.canvas.mediaPoseDeltaMs === "-51", "Preview did not expose comparable media/pose delta metadata.");
+  assert(validation.canvas.mediaPoseDeltaMs === "-51", "Default measured preview changed its media/measurement freshness metadata.");
+  assert(validation.secondSnapshot.poseProvenance === "measured", "Default setPoseFrame behavior did not remain measured.");
+  assert(validation.secondSnapshot.measurementTimestampMs === 1301, "Default measured timestamp compatibility changed.");
+  assert(validation.secondSnapshot.predictionHorizonMs === 0, "Default measured behavior exposed a prediction horizon.");
+  assert(validation.secondSnapshot.presentationTargetDeltaMs === undefined, "Default measured behavior invented a routing target.");
+
+  assert(validation.predictedSnapshot.poseProvenance === "predicted", "Predicted overlay was not explicitly tagged.");
+  assert(validation.predictedSnapshot.measurementTimestampMs === 1301, "Predicted overlay lost its real measurement timestamp.");
+  assert(validation.predictedSnapshot.predictionHorizonMs === 59, "Predicted overlay lost its prediction horizon.");
+  assert(validation.predictedSnapshot.mediaPoseDeltaMs === -51, "Predicted target incorrectly changed measured freshness.");
+  assert(validation.predictedSnapshot.presentationTargetDeltaMs === -110, "Predicted target alignment was not exposed separately.");
+  assert(validation.predictedCanvas.poseProvenance === "predicted", "Canvas diagnostics hid predicted provenance.");
+  assert(validation.predictedCanvas.measurementTimestampMs === "1301", "Canvas diagnostics hid the measurement timestamp.");
+  assert(validation.predictedCanvas.predictionHorizonMs === "59", "Canvas diagnostics hid the prediction horizon.");
+  assert(validation.predictedCanvas.mediaPoseDeltaMs === "-51", "Canvas freshness used the prediction target instead of measurement time.");
+  assert(validation.predictedCanvas.presentationTargetDeltaMs === "-110", "Canvas target delta was not kept separate from freshness.");
+
+  assert(validation.measuredRoutingSnapshot.poseProvenance === "measured", "Measured routing transition retained predicted provenance.");
+  assert(validation.measuredRoutingSnapshot.predictionHorizonMs === 0, "Measured routing transition retained a prediction horizon.");
+  assert(validation.measuredRoutingOverlay.landmarks[1].x === 0.12, "Measured/predicted transition reused stale smoothing state.");
+  assert(validation.clearedSnapshot.poseProvenance === undefined, "Clearing the routing sample masqueraded as measured output.");
+  assert(validation.clearedSnapshot.measurementTimestampMs === undefined, "Clearing retained a stale measurement timestamp.");
+  assert(validation.clearedSnapshot.predictionHorizonMs === undefined, "Clearing retained a stale prediction horizon.");
+  assert(validation.clearedCanvas.poseProvenance === "", "Clearing retained canvas provenance.");
+  assert(validation.clearedCanvas.landmarkCount === "0", "Clearing retained stale overlay landmarks.");
 } finally {
   await browser.close();
   await server.close();
