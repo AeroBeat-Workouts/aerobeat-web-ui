@@ -126,11 +126,15 @@ if (difficultySelect instanceof HTMLSelectElement) {
   difficultySelect.dispatchEvent(new Event("change", { bubbles: true }));
 }
 progress.shadowRoot?.querySelector("button[data-intent='content-import-cancel']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+library.shadowRoot?.querySelector("button[data-intent='library-delete-request']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 library.shadowRoot?.querySelector("button[data-intent='library-delete']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 selector.shadowRoot?.querySelector("button[data-value='spatial-cut']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 playfield.style.setProperty("--aero-role-receptor", "#123456");
 
 fullscreen.shadowRoot?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+fullscreen.setSnapshot({ supported: true, active: true, requestPending: false, errorCode: null });
+fullscreen.shadowRoot?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+fullscreen.setSnapshot({ supported: true, active: false, requestPending: false, errorCode: null });
 fullscreen.remove();
 app.append(fullscreen);
 fullscreen.shadowRoot?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -154,6 +158,7 @@ window.__aeroProductUiValidation = Object.freeze({
   hudText: `${flowHud.shadowRoot?.textContent ?? ""} ${trackHud.shadowRoot?.textContent ?? ""} ${spatialHud.shadowRoot?.textContent ?? ""}`,
   fullscreenDisabledWhenUnsupported,
   fullscreenIntentCount: intents.filter((intent) => intent.type === "fullscreen-request").length,
+  fullscreenExitIntentCount: intents.filter((intent) => intent.type === "fullscreen-exit").length,
   themeToken: getComputedStyle(playfield).getPropertyValue("--aero-role-receptor").trim(),
   intents
 });

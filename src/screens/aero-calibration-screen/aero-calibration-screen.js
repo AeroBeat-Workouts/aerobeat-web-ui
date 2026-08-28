@@ -1,7 +1,7 @@
 // @ts-check
 
 import { defineAeroMediaPosePreview } from "../../elements/aero-media-pose-preview/aero-media-pose-preview.js";
-import { AeroCalibrationBadge, AeroCapabilitiesPanel, AeroGridPlayfield, defineAeroProductPresenters } from "../../elements/aero-product-presenters.js";
+import { AeroCalibrationBadge, AeroCapabilitiesPanel, AeroGridPlayfield, defineAeroProductPresenters, narrowAeroPresenterSnapshot } from "../../elements/aero-product-presenters.js";
 
 /** @typedef {Readonly<Record<string, unknown>>} AeroCalibrationCompositionSnapshot */
 
@@ -20,7 +20,8 @@ export class AeroCalibrationScreen extends HTMLElement {
     defineAeroMediaPosePreview();
     defineAeroProductPresenters();
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    this.#render();
+    this.#ensureDom();
+    this.#applySnapshot();
   }
 
   disconnectedCallback() {
@@ -32,13 +33,13 @@ export class AeroCalibrationScreen extends HTMLElement {
 
   /** @param {AeroCalibrationCompositionSnapshot} snapshot @returns {void} */
   setSnapshot(snapshot) {
-    this.screenSnapshot = Object.freeze({ ...snapshot });
-    this.#render();
+    this.screenSnapshot = narrowAeroPresenterSnapshot(snapshot);
+    this.#applySnapshot();
   }
 
   /** @returns {void} */
-  #render() {
-    if (!this.shadowRoot || !this.isConnected) return;
+  #ensureDom() {
+    if (!this.shadowRoot || this.shadowRoot.childElementCount > 0) return;
     this.shadowRoot.innerHTML = `
       <style>
         :host { block-size: 100%; box-sizing: border-box; display: block; inline-size: 100%; min-block-size: 0; min-inline-size: 0; }
@@ -52,6 +53,11 @@ export class AeroCalibrationScreen extends HTMLElement {
         <div class="preview" part="preview"><aero-media-pose-preview></aero-media-pose-preview><aero-grid-playfield></aero-grid-playfield></div>
         <div class="status" part="status"><aero-calibration-badge></aero-calibration-badge><aero-capabilities-panel></aero-capabilities-panel></div>
       </section>`;
+  }
+
+  /** @returns {void} */
+  #applySnapshot() {
+    if (!this.shadowRoot || !this.isConnected) return;
     const calibration = isRecord(this.screenSnapshot.calibration) ? this.screenSnapshot.calibration : Object.freeze({ state: "waiting" });
     const capabilities = isRecord(this.screenSnapshot.capabilities) ? this.screenSnapshot.capabilities : Object.freeze({});
     const grid = isRecord(this.screenSnapshot.grid) ? this.screenSnapshot.grid : Object.freeze({ mode: "calibration", dimmed: true, label: "Retained calibration grid" });

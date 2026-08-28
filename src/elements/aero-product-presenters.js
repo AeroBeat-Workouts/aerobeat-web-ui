@@ -20,11 +20,11 @@ const sharedStyles = `
   h2, h3, p { margin: 0; }
   h2 { font-size: clamp(1rem, 3.5vw, 1.35rem); }
   h3 { font-size: .94rem; }
-  .muted { color: var(--aero-color-muted, #486c7d); font-size: .82rem; }
+  .muted { color: var(--aero-color-muted, #486c7d); font-size: .82rem; min-inline-size: 0; overflow-wrap: anywhere; }
   .row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
   .stack { display: grid; gap: 8px; }
   .control, button, input, select { border: 1px solid var(--aero-color-border, rgba(53,141,175,.5)); border-radius: 8px; color: inherit; font: inherit; min-block-size: 42px; }
-  button { background: linear-gradient(180deg, #fff, #bcecff); cursor: pointer; font-weight: 750; padding: 8px 13px; touch-action: manipulation; }
+  button { background: linear-gradient(180deg, #fff, #bcecff); color: var(--aero-color-ink, #103447); cursor: pointer; font-weight: 750; padding: 8px 13px; touch-action: manipulation; }
   button[disabled], input[disabled], select[disabled] { cursor: not-allowed; opacity: .55; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--aero-color-focus, #0a84ff); outline-offset: 2px; }
   input, select { background: rgba(255,255,255,.92); inline-size: 100%; padding: 8px 10px; }
@@ -51,6 +51,7 @@ class AeroPresenterElement extends HTMLElement {
     this.boundClick = (event) => this.handleDelegatedClick(event);
     this.boundChange = (event) => this.handleDelegatedChange(event);
     this.boundSubmit = (event) => this.handleDelegatedSubmit(event);
+    this.boundKeydown = (event) => this.handleDelegatedKeydown(event);
   }
 
   connectedCallback() {
@@ -60,6 +61,7 @@ class AeroPresenterElement extends HTMLElement {
     this.shadowRoot?.addEventListener("click", this.boundClick);
     this.shadowRoot?.addEventListener("change", this.boundChange);
     this.shadowRoot?.addEventListener("submit", this.boundSubmit);
+    this.shadowRoot?.addEventListener("keydown", this.boundKeydown);
     this.render();
   }
 
@@ -67,11 +69,12 @@ class AeroPresenterElement extends HTMLElement {
     this.shadowRoot?.removeEventListener("click", this.boundClick);
     this.shadowRoot?.removeEventListener("change", this.boundChange);
     this.shadowRoot?.removeEventListener("submit", this.boundSubmit);
+    this.shadowRoot?.removeEventListener("keydown", this.boundKeydown);
   }
 
   /** @param {AeroPresenterSnapshot} snapshot */
   setSnapshot(snapshot) {
-    this.presenterSnapshot = Object.freeze({ ...snapshot });
+    this.presenterSnapshot = narrowAeroPresenterSnapshot(snapshot);
     this.render();
   }
 
@@ -101,8 +104,11 @@ class AeroPresenterElement extends HTMLElement {
     if (!(target instanceof HTMLFormElement) || target.dataset.form !== "search") return;
     event.preventDefault();
     const input = this.shadowRoot?.querySelector("input[data-field='query']");
-    this.emitIntent("beatsaver-search", { query: input instanceof HTMLInputElement ? input.value.trim() : "" });
+    this.emitIntent("beatsaver-search", { query: input instanceof HTMLInputElement ? input.value.trim().slice(0, 256) : "" });
   }
+
+  /** @param {KeyboardEvent} event @returns {void} */
+  handleDelegatedKeydown(event) {}
 
   /** @param {string} type @param {HTMLElement} target @returns {void} */
   onIntent(type, target) {
@@ -120,7 +126,25 @@ class AeroPresenterElement extends HTMLElement {
   /** @param {string} markup @returns {void} */
   renderMarkup(markup) {
     if (!this.shadowRoot || !this.isConnected) return;
+    const focused = this.shadowRoot.activeElement;
+    const focusIdentity = focused instanceof HTMLElement ? Object.freeze({
+      intent: focused.dataset.intent ?? "",
+      value: focused.dataset.value ?? "",
+      field: focused.dataset.field ?? ""
+    }) : null;
     this.shadowRoot.innerHTML = `<style>${sharedStyles}</style>${markup}`;
+    if (focusIdentity && (focusIdentity.intent || focusIdentity.field)) {
+      const controls = this.shadowRoot.querySelectorAll("button,input,select");
+      for (const control of controls) {
+        if (control instanceof HTMLElement &&
+          (control.dataset.intent ?? "") === focusIdentity.intent &&
+          (control.dataset.value ?? "") === focusIdentity.value &&
+          (control.dataset.field ?? "") === focusIdentity.field) {
+          control.focus();
+          break;
+        }
+      }
+    }
   }
 }
 
@@ -159,6 +183,10 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
 
   /** @param {string} type @param {HTMLElement} target */
   onIntent(type, target) {
+    const selectedMap = readRecord(this.presenterSnapshot, "selectedMap");
+    const mapId = selectedMap ? readString(selectedMap, "mapId", "") : "";
+    const versionHash = readString(this.presenterSnapshot, "selectedVersionHash", "");
+    const difficultyId = readString(this.presenterSnapshot, "selectedDifficulty", "");
     if (type === "beatsaver-select-map") {
       this.emitIntent(type, { mapId: target.dataset.value ?? "" });
       return;
@@ -169,11 +197,21 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
       return;
     }
     if (type === "beatsaver-version-select") {
-      this.emitIntent(type, { versionHash: target instanceof HTMLSelectElement ? target.value : "" });
+      this.emitIntent(type, { mapId, versionHash: target instanceof HTMLSelectElement ? target.value : "" });
       return;
     }
     if (type === "beatsaver-difficulty-select") {
-      this.emitIntent(type, { difficultyId: target instanceof HTMLSelectElement ? target.value : "" });
+      this.emitIntent(type, { mapId, versionHash, difficultyId: target instanceof HTMLSelectElement ? target.value : "" });
+      return;
+    }
+    if (type === "beatsaver-import") {
+      const versionSelect = this.shadowRoot?.querySelector("select[data-intent='beatsaver-version-select']");
+      const difficultySelect = this.shadowRoot?.querySelector("select[data-intent='beatsaver-difficulty-select']");
+      this.emitIntent(type, {
+        mapId,
+        versionHash: versionSelect instanceof HTMLSelectElement ? versionSelect.value : versionHash,
+        difficultyId: difficultySelect instanceof HTMLSelectElement ? difficultySelect.value : difficultyId
+      });
       return;
     }
     this.emitIntent(type);
@@ -197,16 +235,45 @@ export class AeroContentImportProgress extends AeroPresenterElement {
 
 /** Locally authored package and quota presenter. */
 export class AeroContentLibrary extends AeroPresenterElement {
+  constructor() {
+    super();
+    this.pendingDeletePackageId = "";
+  }
+
   render() {
     const packages = readRecordList(this.presenterSnapshot, "packages").slice(0, 100);
-    const used = readNumber(this.presenterSnapshot, "usedBytes", 0);
-    const quota = readNumber(this.presenterSnapshot, "quotaBytes", 0);
+    const used = readStorageBytes(this.presenterSnapshot, "usedBytes");
+    const quota = readStorageBytes(this.presenterSnapshot, "quotaBytes");
     const error = readString(this.presenterSnapshot, "errorMessage", "");
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards" part="items" role="list">${packages.map((item) => libraryItemMarkup(item)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
+    if (this.pendingDeletePackageId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeletePackageId)) this.pendingDeletePackageId = "";
+    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards" part="items" role="list">${packages.map((item) => libraryItemMarkup(item, this.pendingDeletePackageId)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
   }
 
   /** @param {string} type @param {HTMLElement} target */
-  onIntent(type, target) { this.emitIntent(type, { packageId: target.dataset.value ?? "" }); }
+  onIntent(type, target) {
+    const packageId = target.dataset.value ?? "";
+    if (type === "library-delete-request") {
+      this.pendingDeletePackageId = packageId;
+      this.render();
+      queueMicrotask(() => {
+        const confirm = this.shadowRoot?.querySelector("button[data-intent='library-delete']");
+        if (confirm instanceof HTMLElement) confirm.focus();
+      });
+      return;
+    }
+    if (type === "library-delete-cancel") {
+      this.pendingDeletePackageId = "";
+      this.render();
+      return;
+    }
+    if (type === "library-delete") {
+      this.pendingDeletePackageId = "";
+      this.emitIntent(type, { packageId });
+      this.render();
+      return;
+    }
+    this.emitIntent(type, { packageId });
+  }
 }
 
 /** T-pose hold/cooldown/success badge. */
@@ -226,7 +293,14 @@ export class AeroGridPlayfield extends AeroPresenterElement {
     const mode = readString(this.presenterSnapshot, "mode", "flow");
     const dimmed = readBoolean(this.presenterSnapshot, "dimmed", false);
     const label = readString(this.presenterSnapshot, "label", `${titleCase(mode)} playfield`);
-    this.renderMarkup(`<section class="playfield ${dimmed ? "dimmed" : ""}" part="playfield" aria-label="${escapeAttribute(label)}"><div class="surface" part="render-surface" data-render-surface></div><div class="receptors" aria-hidden="true">${Array.from({ length: 12 }, (_, index) => `<i data-cell="${index}"></i>`).join("")}</div></section><style>:host{block-size:100%;inline-size:100%;min-block-size:12rem}.playfield{background:linear-gradient(180deg,var(--aero-playfield-background-start,#071426),var(--aero-playfield-background-end,#153b5d));block-size:100%;border-radius:12px;inline-size:100%;overflow:hidden;position:relative}.playfield.dimmed{filter:brightness(.45)}.surface{inset:0;position:absolute}.receptors{display:grid;gap:2%;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);inset:8%;position:absolute}.receptors i{border:1px solid color-mix(in srgb,var(--aero-role-receptor,#d9f5ff) 32%,transparent);border-radius:8px}</style>`);
+    if (!this.shadowRoot?.querySelector(".playfield")) {
+      this.renderMarkup(`<section class="playfield" part="playfield"><div class="surface" part="render-surface" data-render-surface></div><div class="receptors" aria-hidden="true">${Array.from({ length: 12 }, (_, index) => `<i data-cell="${index}"></i>`).join("")}</div></section><style>:host{block-size:100%;inline-size:100%;min-block-size:12rem}.playfield{background:linear-gradient(180deg,var(--aero-playfield-background-start,#071426),var(--aero-playfield-background-end,#153b5d));block-size:100%;border-radius:12px;inline-size:100%;overflow:hidden;position:relative}.playfield.dimmed{filter:brightness(.45)}.surface{inset:0;position:absolute}.receptors{display:grid;gap:2%;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);inset:8%;position:absolute}.receptors i{border:1px solid color-mix(in srgb,var(--aero-role-receptor,#d9f5ff) 32%,transparent);border-radius:8px}</style>`);
+    }
+    const playfield = this.shadowRoot?.querySelector(".playfield");
+    if (playfield instanceof HTMLElement) {
+      playfield.classList.toggle("dimmed", dimmed);
+      playfield.setAttribute("aria-label", label);
+    }
   }
 
   /** @returns {HTMLElement | null} Public renderer attachment surface. */
@@ -252,7 +326,7 @@ export class AeroBoxingTrackHud extends AeroPresenterElement {
     const left = readString(this.presenterSnapshot, "leftAction", "Ready");
     const right = readString(this.presenterSnapshot, "rightAction", "Ready");
     const defense = readString(this.presenterSnapshot, "defense", "Clear");
-    this.renderMarkup(`<section class="tracks" part="hud" aria-label="Semantic Track Boxing"><div class="lane left" part="left-lane"><strong>Athlete left</strong><span>${escapeHtml(left)}</span></div><div class="lane right" part="right-lane"><strong>Athlete right</strong><span>${escapeHtml(right)}</span></div><div class="defense" part="defense-layer">Defense: ${escapeHtml(defense)}</div></section><style>.tracks{display:grid;gap:8px;grid-template-columns:1fr 1fr}.lane,.defense{border-radius:10px;color:#fff;display:grid;gap:4px;min-block-size:64px;padding:12px}.left{background:var(--aero-role-left,#2693ff)}.right{background:var(--aero-role-right,#39c96b)}.defense{background:var(--aero-role-guard,#9a67ea);grid-column:1/-1;min-block-size:auto}</style>`);
+    this.renderMarkup(`<section class="tracks" part="hud" aria-label="Semantic Track Boxing"><div class="lane left" part="left-lane"><strong>Athlete left</strong><span>${escapeHtml(left)}</span></div><div class="lane right" part="right-lane"><strong>Athlete right</strong><span>${escapeHtml(right)}</span></div><div class="defense" part="defense-layer">Defense: ${escapeHtml(defense)}</div></section><style>.tracks{display:grid;gap:8px;grid-template-columns:1fr 1fr}.lane,.defense{border-radius:10px;color:var(--aero-role-on-color,#071426);display:grid;gap:4px;min-block-size:64px;padding:12px}.left{background:var(--aero-role-left,#2693ff)}.right{background:var(--aero-role-right,#39c96b)}.defense{background:var(--aero-role-guard,#9a67ea);grid-column:1/-1;min-block-size:auto}</style>`);
   }
 }
 
@@ -268,12 +342,33 @@ export class AeroBoxingSpatialHud extends AeroPresenterElement {
 
 /** Tracking-loss pause presenter. */
 export class AeroTrackingPause extends AeroPresenterElement {
+  constructor() {
+    super();
+    this.dialogActive = false;
+    /** @type {HTMLElement | null} */
+    this.returnFocus = null;
+  }
+
   render() {
     const active = readBoolean(this.presenterSnapshot, "active", false);
     const message = readString(this.presenterSnapshot, "message", "Tracking paused. Recalibrate to continue.");
     const reason = readString(this.presenterSnapshot, "reason", "tracking_lost");
+    if (active && !this.dialogActive) this.returnFocus = deepActiveElement();
+    const restoreFocus = !active && this.dialogActive ? this.returnFocus : null;
+    this.dialogActive = active;
     this.toggleAttribute("hidden", !active);
-    this.renderMarkup(`<section class="overlay" part="overlay" role="alertdialog" aria-modal="true" aria-labelledby="tracking-heading"><h2 id="tracking-heading">Workout paused</h2><p>${escapeHtml(message)}</p><span class="pill">${escapeHtml(reason)}</span><button part="recalibrate-button" type="button" data-intent="calibration-reset">Recalibrate</button></section><style>:host{inset:0;position:absolute;z-index:20}:host([hidden]){display:none}.overlay{align-content:center;background:rgba(4,17,30,var(--aero-overlay-dim-opacity,.72));block-size:100%;color:#fff;display:grid;gap:14px;inline-size:100%;justify-items:center;padding:24px;text-align:center}</style>`);
+    this.renderMarkup(`<section class="overlay" part="overlay" role="alertdialog" aria-modal="true" aria-labelledby="tracking-heading" aria-describedby="tracking-message"><h2 id="tracking-heading">Workout paused</h2><p id="tracking-message">${escapeHtml(message)}</p><span class="pill">${escapeHtml(reason)}</span><button part="recalibrate-button" type="button" data-intent="calibration-reset">Recalibrate</button></section><style>:host{inset:0;position:absolute;z-index:20}:host([hidden]){display:none}.overlay{align-content:center;background:rgba(4,17,30,var(--aero-overlay-dim-opacity,.72));block-size:100%;color:#fff;display:grid;gap:14px;inline-size:100%;justify-items:center;padding:24px;text-align:center}</style>`);
+    queueMicrotask(() => {
+      if (active) {
+        const action = this.shadowRoot?.querySelector("button[data-intent='calibration-reset']");
+        if (action instanceof HTMLElement) action.focus();
+      } else if (restoreFocus?.isConnected) restoreFocus.focus();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.dialogActive && this.returnFocus?.isConnected) this.returnFocus.focus();
   }
 }
 
@@ -284,7 +379,7 @@ export class AeroResumeCountdown extends AeroPresenterElement {
     const value = readNumber(this.presenterSnapshot, "value", 3);
     const frozen = readBoolean(this.presenterSnapshot, "frozen", true);
     this.toggleAttribute("hidden", !active);
-    this.renderMarkup(`<div class="countdown" part="countdown" role="status" aria-live="assertive" aria-label="Resume countdown ${value}"><strong>${value}</strong><span>${frozen ? "Workout time frozen" : "Get ready"}</span></div><style>:host([hidden]){display:none}.countdown{align-items:center;background:rgba(4,17,30,.68);border-radius:50%;color:#fff;display:grid;inline-size:8rem;justify-items:center;min-block-size:8rem;padding:12px;text-align:center}.countdown strong{font-size:3.6rem;line-height:1}</style>`);
+    this.renderMarkup(`<div class="countdown" part="countdown" role="status" aria-live="assertive" aria-label="Resume countdown ${value}"><strong>${value}</strong><span>${frozen ? "Workout time frozen" : "Get ready"}</span></div><style>:host{display:grid;inset:0;place-items:center;pointer-events:none;position:absolute;z-index:19}:host([hidden]){display:none}.countdown{align-items:center;background:rgba(4,17,30,.82);border-radius:50%;color:#fff;display:grid;inline-size:8rem;justify-items:center;min-block-size:8rem;padding:12px;text-align:center}.countdown strong{font-size:3.6rem;line-height:1}</style>`);
   }
 }
 
@@ -307,7 +402,7 @@ export class AeroFullscreenButton extends AeroPresenterElement {
     const active = readBoolean(this.presenterSnapshot, "active", false);
     const pending = readBoolean(this.presenterSnapshot, "requestPending", false);
     const error = readString(this.presenterSnapshot, "errorCode", "");
-    this.renderMarkup(`<div class="stack"><button part="control" type="button" data-intent="fullscreen-request" aria-pressed="${active}" ${supported && !pending ? "" : "disabled"}>${active ? "Exit fullscreen" : "Enter fullscreen"}</button>${error ? `<span class="error" role="status">${escapeHtml(error)}</span>` : ""}</div>`);
+    this.renderMarkup(`<div class="stack"><button part="control" type="button" data-intent="${active ? "fullscreen-exit" : "fullscreen-request"}" aria-pressed="${active}" ${supported && !pending ? "" : "disabled"}>${active ? "Exit fullscreen" : "Enter fullscreen"}</button>${error ? `<span class="error" role="status">${escapeHtml(error)}</span>` : ""}</div>`);
   }
 }
 
@@ -341,15 +436,47 @@ const prototypeOptions = Object.freeze([
 /** Flow/four-Boxing profile and tuning identity presenter. */
 export class AeroPrototypeSelector extends AeroPresenterElement {
   render() {
-    const selected = readString(this.presenterSnapshot, "selectedProfileId", "flow");
+    const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
+    const selected = prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow";
     const identities = readRecordList(this.presenterSnapshot, "tuningIdentities");
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="profiles-heading"><h2 id="profiles-heading">Workout prototype</h2><div class="cards" part="profiles" role="radiogroup" aria-label="Prototype profile">${prototypeOptions.map((option) => `<button type="button" part="profile" role="radio" aria-checked="${selected === option.id}" data-intent="prototype-select" data-value="${option.id}"><strong>${escapeHtml(option.label)}</strong><span class="muted">${escapeHtml(option.rulesetId)}${option.recipeId ? ` · ${escapeHtml(option.recipeId)}` : ""}</span></button>`).join("")}</div><section class="stack" part="telemetry" aria-label="Active tuning identities">${identities.map(identityMarkup).join("") || `<p class="muted">No tuning identity loaded.</p>`}</section><div class="row"><button type="button" part="import-button" data-intent="tuning-import-request">Import profiles</button><button type="button" part="export-button" data-intent="tuning-export">Export profiles</button><button type="button" part="reset-button" data-intent="tuning-reset">Reset profiles</button></div></section>`);
+    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="profiles-heading"><h2 id="profiles-heading">Workout prototype</h2><div class="cards" part="profiles" role="radiogroup" aria-label="Prototype profile">${prototypeOptions.map((option) => `<button type="button" part="profile" role="radio" aria-checked="${selected === option.id}" tabindex="${selected === option.id ? "0" : "-1"}" data-intent="prototype-select" data-value="${option.id}"><strong>${escapeHtml(option.label)}</strong><span class="muted">${escapeHtml(option.rulesetId)}${option.recipeId ? ` · ${escapeHtml(option.recipeId)}` : ""}</span></button>`).join("")}</div><section class="stack" part="telemetry" aria-label="Active tuning identities">${identities.map(identityMarkup).join("") || `<p class="muted">No tuning identity loaded.</p>`}</section><div class="row"><button type="button" part="import-button" data-intent="tuning-import-request">Import profiles</button><button type="button" part="export-button" data-intent="tuning-export">Export profiles</button><button type="button" part="reset-button" data-intent="tuning-reset">Reset profiles</button></div></section>`);
   }
 
   /** @param {string} type @param {HTMLElement} target */
   onIntent(type, target) {
-    if (type === "prototype-select") this.emitIntent(type, { profileId: target.dataset.value ?? "" });
-    else this.emitIntent(type);
+    if (type === "prototype-select") {
+      for (const radio of this.shadowRoot?.querySelectorAll("button[role='radio']") ?? []) {
+        if (radio instanceof HTMLButtonElement) {
+          const selected = radio === target;
+          radio.tabIndex = selected ? 0 : -1;
+          radio.setAttribute("aria-checked", selected ? "true" : "false");
+        }
+      }
+      this.emitIntent(type, { profileId: target.dataset.value ?? "" });
+    } else this.emitIntent(type);
+  }
+
+  /** @param {KeyboardEvent} event */
+  handleDelegatedKeydown(event) {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLButtonElement) || target.getAttribute("role") !== "radio") return;
+    const radios = [...(this.shadowRoot?.querySelectorAll("button[role='radio']") ?? [])].filter((item) => item instanceof HTMLButtonElement);
+    const currentIndex = radios.indexOf(target);
+    if (currentIndex < 0) return;
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % radios.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + radios.length) % radios.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = radios.length - 1;
+    else return;
+    event.preventDefault();
+    for (const [index, radio] of radios.entries()) {
+      radio.tabIndex = index === nextIndex ? 0 : -1;
+      radio.setAttribute("aria-checked", index === nextIndex ? "true" : "false");
+    }
+    const next = radios[nextIndex];
+    next.focus();
+    this.emitIntent("prototype-select", { profileId: next.dataset.value ?? "" });
   }
 }
 
@@ -383,6 +510,8 @@ export function defineAeroProductPresenters() {
 function readString(record, key, fallback) { const value = record[key]; return typeof value === "string" ? value : fallback; }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @param {number} fallback @returns {number} */
 function readNumber(record, key, fallback) { const value = record[key]; return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
+/** @param {Readonly<Record<string, unknown>>} record @param {string} key @returns {number} */
+function readStorageBytes(record, key) { return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(readNumber(record, key, 0)))); }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @param {boolean} fallback @returns {boolean} */
 function readBoolean(record, key, fallback) { const value = record[key]; return typeof value === "boolean" ? value : fallback; }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @returns {Readonly<Record<string, unknown>> | null} */
@@ -394,7 +523,59 @@ function readStringList(record, key) { const value = record[key]; return Array.i
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @returns {number[]} */
 function readNumberList(record, key) { const value = record[key]; return Array.isArray(value) ? value.filter((item) => typeof item === "number" && Number.isFinite(item)) : []; }
 /** @param {unknown} value @returns {value is Readonly<Record<string, unknown>>} */
-function isPlainRecord(value) { return typeof value === "object" && value !== null && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null); }
+function isPlainRecord(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  try { const prototype = Object.getPrototypeOf(value); return prototype === Object.prototype || prototype === null; } catch { return false; }
+}
+/** Narrow an external presenter snapshot to immutable JSON-like data. @param {unknown} value @returns {AeroPresenterSnapshot} */
+export function narrowAeroPresenterSnapshot(value) {
+  const narrowed = narrowSnapshotValue(value, new Set(), 0);
+  return isPlainRecord(narrowed) ? narrowed : Object.freeze({});
+}
+/** @param {unknown} value @param {Set<object>} seen @param {number} depth @returns {unknown} */
+function narrowSnapshotValue(value, seen, depth) {
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string") return value.slice(0, 4096);
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (depth >= 10 || typeof value !== "object" || value === null || seen.has(value)) return undefined;
+  if (Array.isArray(value)) {
+    seen.add(value);
+    const items = [];
+    const length = Math.min(500, value.length);
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !("value" in descriptor)) continue;
+      const narrowed = narrowSnapshotValue(descriptor.value, seen, depth + 1);
+      if (narrowed !== undefined) items.push(narrowed);
+    }
+    seen.delete(value);
+    return Object.freeze(items);
+  }
+  if (!isPlainRecord(value)) return undefined;
+  seen.add(value);
+  /** @type {Record<string, unknown>} */
+  const record = {};
+  try {
+    for (const key of Reflect.ownKeys(value).slice(0, 500)) {
+      if (typeof key !== "string") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor?.enumerable || !("value" in descriptor)) continue;
+      const narrowed = narrowSnapshotValue(descriptor.value, seen, depth + 1);
+      if (narrowed !== undefined) record[key] = narrowed;
+    }
+  } catch {
+    seen.delete(value);
+    return undefined;
+  }
+  seen.delete(value);
+  return Object.freeze(record);
+}
+/** @returns {HTMLElement | null} */
+function deepActiveElement() {
+  let active = document.activeElement;
+  while (active instanceof HTMLElement && active.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active instanceof HTMLElement ? active : null;
+}
 /** @param {string} value @returns {string} */
 function escapeHtml(value) { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
 /** @param {string} value @returns {string} */
@@ -409,10 +590,19 @@ function statusText(state, count) { if (state === "loading") return "Loading Bea
 function mapResultMarkup(result) { const id = readString(result, "mapId", ""); const name = readString(result, "name", "Untitled map"); const author = readString(result, "songAuthorName", "Unknown artist"); return `<article role="listitem"><button class="card" part="result" type="button" data-intent="beatsaver-select-map" data-value="${escapeAttribute(id)}"><strong>${escapeHtml(name)}</strong><span class="muted">${escapeHtml(author)} · ${escapeHtml(id)}</span></button></article>`; }
 /** @param {string} value @param {string} label @param {string} selected @returns {string} */
 function optionMarkup(value, label, selected) { return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`; }
-/** @param {Readonly<Record<string, unknown>>} item @returns {string} */
-function libraryItemMarkup(item) { const id = readString(item, "packageId", ""); const name = readString(item, "name", "Untitled package"); const variantCount = readNumber(item, "variantCount", 0); return `<article class="card" part="item" role="listitem"><h3>${escapeHtml(name)}</h3><p class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</p><div class="row"><button type="button" data-intent="library-select" data-value="${escapeAttribute(id)}">Play</button><button type="button" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button><button type="button" data-intent="library-delete" data-value="${escapeAttribute(id)}">Delete</button></div></article>`; }
+/** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @returns {string} */
+function libraryItemMarkup(item, pendingDeletePackageId) {
+  const id = readString(item, "packageId", "");
+  const name = readString(item, "name", "Untitled package");
+  const variantCount = readNumber(item, "variantCount", 0);
+  const pending = id !== "" && id === pendingDeletePackageId;
+  const deleteControls = pending
+    ? `<span role="status">Delete ${escapeHtml(name)}?</span><button type="button" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm delete</button><button type="button" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
+    : `<button type="button" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
+  return `<article class="card" part="item" role="listitem"><h3>${escapeHtml(name)}</h3><p class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</p><div class="row"><button type="button" data-intent="library-select" data-value="${escapeAttribute(id)}">Play</button><button type="button" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div></article>`;
+}
 /** @param {number} used @param {number} quota @returns {string} */
-function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used)} stored · quota unavailable`; return `${formatBytes(used)} of ${formatBytes(quota)} used (${Math.round((used / quota) * 100)}%)`; }
+function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used)} stored · quota unavailable`; if (used > quota) return `${formatBytes(used)} of ${formatBytes(quota)} used · over quota`; return `${formatBytes(used)} of ${formatBytes(quota)} used (${Math.round((used / quota) * 100)}%)`; }
 /** @param {number} bytes @returns {string} */
 function formatBytes(bytes) { if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`; }
 /** @param {string} state @returns {string} */

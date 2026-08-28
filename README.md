@@ -14,25 +14,25 @@ The embeddable product root is `aero-game`, owned by `aerobeat-web-assembly`. Th
 
 - `aero-beatsaver-browser`: bounded search/latest/results/detail/version/difficulty and local-ZIP-picker intents.
 - `aero-content-import-progress`: acquisition/conversion/persistence progress and cancellation intent.
-- `aero-content-library`: authored packages, quota, select/delete/export intents.
+- `aero-content-library`: authored packages, bounded quota truth, select/export, and explicit two-step delete-confirmation intents.
 - `aero-calibration-badge` and `aero-calibration-screen`: automatic T-pose waiting/holding/cooldown/ready/loss composition and explicit reset intent.
 - `aero-grid-playfield`: visible shared 4×3 renderer host; `getRenderSurface()` is the public attachment seam.
 - `aero-flow-hud`, `aero-boxing-track-hud`, `aero-boxing-spatial-hud`: mode-specific presentation only.
 - `aero-tracking-pause` and `aero-resume-countdown`: tracking-loss/recalibration and frozen-time countdown overlays.
 - `aero-background-environment`: cosmetic environment state; loading/fallback policy remains external.
-- `aero-fullscreen-button`: child-owned user-gesture fullscreen intent and public state.
+- `aero-fullscreen-button`: child-owned user-gesture `fullscreen-request`/`fullscreen-exit` intent and public state.
 - `aero-capabilities-panel` and `aero-error-panel`: capability/limitation and user-safe diagnostics.
 - `aero-prototype-selector`: Flow plus all four Boxing combinations, tuning identity/version/hash telemetry, regeneration-required state and import/export/reset intents.
 
-Intent details are `{ type, payload }`. Payloads contain scalar IDs/query values only; raw `File`, ZIP/audio bytes, media objects, screenshots, provider DTOs and service objects never leave UI.
+Intent details are `{ type, payload }`. Payloads contain scalar IDs/query values only; selected BeatSaver import carries exact `mapId`/`versionHash`/`difficultyId`. Raw `File`, ZIP/audio bytes, media objects, screenshots, provider DTOs and service objects never leave UI. External snapshots are narrowed into immutable JSON-like records without executing accessors.
 
 Existing reusable primitives remain exported: `aero-button`, `aero-select`, `aero-status-panel`, `aero-media-pose-preview`, and `aero-pose-flow-panel`.
 
 ## Lifecycle, accessibility and embedding
 
-- Product presenters attach DOM/listeners only while connected and remove delegated listeners on disconnect; reconnect installs one listener set.
+- Product presenters attach DOM/listeners only while connected and remove delegated listeners on disconnect; reconnect installs one listener set. Calibration composition preserves the same media preview and renderer surface across snapshot updates.
 - Components fill their assigned parent and never assume `100vh`, body ownership, routes, or browser history.
-- Controls use native keyboard semantics, visible focus, touch-sized targets, labels and live regions. Narrow 390px and landscape layouts are exercised in Chromium.
+- Controls use native keyboard semantics, visible focus, touch-sized targets, labels and live regions. Prototype radios use roving arrow-key selection; tracking pause moves focus into its alert dialog and restores it afterward. Desktop, 390px portrait and phone-landscape layouts are exercised in Chromium.
 - Platform reduced-motion preferences suppress component transitions; gameplay animation policy remains with renderer/theme owners.
 - Stable selected `::part` surfaces support controlled direct-embed theming. Arbitrary slots are not an integration contract.
 - Assembly consumes public setters and events; it must not traverse component shadow roots.
