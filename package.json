@@ -1,26 +1,35 @@
 {
   "name": "@aerobeat/web-ui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "src/",
+    "docs/decisions/",
+    "README.md",
+    "LICENSE.md"
+  ],
   "exports": {
     ".": "./src/index.js",
     "./elements/aero-button": "./src/elements/aero-button/aero-button.js",
     "./elements/aero-media-pose-preview": "./src/elements/aero-media-pose-preview/aero-media-pose-preview.js",
     "./elements/aero-pose-flow-panel": "./src/elements/aero-pose-flow-panel/aero-pose-flow-panel.js",
+    "./elements/product-presenters": "./src/elements/aero-product-presenters.js",
     "./elements/aero-select": "./src/elements/aero-select/aero-select.js",
     "./elements/aero-status-panel": "./src/elements/aero-status-panel/aero-status-panel.js",
     "./screens/aero-calibration-screen": "./src/screens/aero-calibration-screen/aero-calibration-screen.js"
   },
   "scripts": {
-    "check": "npm run check:jsdoc && npm run check:imports && npm run check:components && npm run check:console && npm run check:preview",
+    "check": "npm run check:jsdoc && npm run check:imports && npm run check:components && npm run check:console && npm run check:product-contract && npm run check:preview && npm run check:product-ui",
     "check:jsdoc": "node scripts/validate-jsdoc-no-any.js",
     "check:imports": "node scripts/validate-public-imports.js",
     "check:components": "node scripts/validate-component-rules.js",
     "check:console": "node scripts/validate-playwright-console-noise.js",
+    "check:product-contract": "node scripts/validate-product-ui-contract.js",
     "check:preview": "node scripts/validate-media-pose-preview-browser.js",
+    "check:product-ui": "npm run testbed:link-self && node scripts/validate-product-ui-browser.js",
     "test": "npm run check",
-    "test:browser": "npm run check:console && npm run check:preview",
+    "test:browser": "npm run check:console && npm run check:preview && npm run check:product-ui",
     "demo": "npm --prefix .testbed run demo",
     "testbed:serve": "npm --prefix .testbed run serve",
     "testbed:link-self": "node scripts/link-testbed-self.js"
@@ -36,7 +45,7 @@
     "vite": "^8.2.2"
   },
   "peerDependencies": {
-    "@aerobeat/web-contracts": "0.0.0",
+    "@aerobeat/web-contracts": "0.1.0",
     "@aerobeat/web-renderer": "0.0.0",
     "@aerobeat/web-style": "0.0.0",
     "@aerobeat/web-video": "0.0.0"

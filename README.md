@@ -1,61 +1,67 @@
 # aerobeat-web-ui
 
-AeroBeat native Web Components for calibration, HUD, menus, settings, debug, and testbed screens.
+AeroBeat native Web Components for calibration, content discovery/authoring status, gameplay HUDs, pause/countdown, profiles, fullscreen and testbed screens.
 
 ## Responsibility
 
-This repo owns product UI components and composition screens built from named `aero-*` Web Components. The first skeleton starts the Frutiger Aero visual direction with reusable components that CV and input scenes can compose.
+This repository owns product presenters built from named `aero-*` Web Components. Components accept immutable public snapshots, render accessible state, and emit documented composed/bubbling intent events. They do not own style-token definitions, BeatSaver transport, ZIP parsing, Worker conversion, IndexedDB, camera/CV, calibration math, gameplay scoring, renderer traversal, or assembly service lookup.
 
-It does not own style tokens, camera/CV logic, input routing, gameplay scoring, renderer output, content conversion, or assembly service wiring.
+The embeddable product root is `aero-game`, owned by `aerobeat-web-assembly`. This package does not define or retain an `aerobeat-app` root.
 
-## Public API Surface
+## Product Presenter API
 
-- `src/index.js` registers and exports starter UI components.
-- `src/elements/aero-button/aero-button.js` defines a reusable command component.
-- `src/elements/aero-media-pose-preview/aero-media-pose-preview.js` composes public `@aerobeat/web-video` media surfaces with public `@aerobeat/web-renderer` WebGL2 pose overlays. Its surface and pose setters can stage data without drawing so assembly can pace overlay rendering independently; immediate rendering remains the default for existing consumers.
-- `src/elements/aero-status-panel/aero-status-panel.js` defines a reusable status surface for proving scenes.
-- `src/elements/aero-select/aero-select.js` defines a reusable compact dropdown for phone-test settings.
-- `src/screens/aero-calibration-screen/aero-calibration-screen.js` composes visible UI from `aero-*` components only.
+`src/elements/aero-product-presenters.js` exports the Task 9 presenter set and the single `aero:ui:intent` event contract:
 
-## Adjacent Repos
+- `aero-beatsaver-browser`: bounded search/latest/results/detail/version/difficulty and local-ZIP-picker intents.
+- `aero-content-import-progress`: acquisition/conversion/persistence progress and cancellation intent.
+- `aero-content-library`: authored packages, quota, select/delete/export intents.
+- `aero-calibration-badge` and `aero-calibration-screen`: automatic T-pose waiting/holding/cooldown/ready/loss composition and explicit reset intent.
+- `aero-grid-playfield`: visible shared 4×3 renderer host; `getRenderSurface()` is the public attachment seam.
+- `aero-flow-hud`, `aero-boxing-track-hud`, `aero-boxing-spatial-hud`: mode-specific presentation only.
+- `aero-tracking-pause` and `aero-resume-countdown`: tracking-loss/recalibration and frozen-time countdown overlays.
+- `aero-background-environment`: cosmetic environment state; loading/fallback policy remains external.
+- `aero-fullscreen-button`: child-owned user-gesture fullscreen intent and public state.
+- `aero-capabilities-panel` and `aero-error-panel`: capability/limitation and user-safe diagnostics.
+- `aero-prototype-selector`: Flow plus all four Boxing combinations, tuning identity/version/hash telemetry, regeneration-required state and import/export/reset intents.
 
-- `aerobeat-web-style` owns theme tokens consumed by components.
-- `aerobeat-web-video` owns camera/video/replay media lifecycle and surface metadata consumed by preview presenters.
-- `aerobeat-web-renderer` owns durable WebGL2 landmark/skeleton drawing consumed by preview presenters.
-- `aerobeat-web-cv` owns camera/CV service data shown by calibration components.
-- `aerobeat-web-input` owns routed input event data shown by proving scenes.
-- `aerobeat-web-assembly` wires screens and services into the product shell.
+Intent details are `{ type, payload }`. Payloads contain scalar IDs/query values only; raw `File`, ZIP/audio bytes, media objects, screenshots, provider DTOs and service objects never leave UI.
 
-## Allowed Imports
+Existing reusable primitives remain exported: `aero-button`, `aero-select`, `aero-status-panel`, `aero-media-pose-preview`, and `aero-pose-flow-panel`.
 
-Runtime code may import public exports from `@aerobeat/web-contracts` and style entry points from `@aerobeat/web-style`. Do not import sibling internals, one-off scene controls, or vendor-native shapes.
+## Lifecycle, accessibility and embedding
 
-## Web Component Rules
+- Product presenters attach DOM/listeners only while connected and remove delegated listeners on disconnect; reconnect installs one listener set.
+- Components fill their assigned parent and never assume `100vh`, body ownership, routes, or browser history.
+- Controls use native keyboard semantics, visible focus, touch-sized targets, labels and live regions. Narrow 390px and landscape layouts are exercised in Chromium.
+- Platform reduced-motion preferences suppress component transitions; gameplay animation policy remains with renderer/theme owners.
+- Stable selected `::part` surfaces support controlled direct-embed theming. Arbitrary slots are not an integration contract.
+- Assembly consumes public setters and events; it must not traverse component shadow roots.
 
-Every visible primitive, control, widget, panel, modal, overlay, HUD piece, and screen element must be a named `aero-*` Web Component. Screens and scenes may compose layout, but visible UI must come from component modules with standalone scenes and debug data.
+## Adjacent Repositories
 
-## Testbed Shape
+- `aerobeat-web-contracts` owns public element names, ruleset/recipe IDs, snapshots and host/iframe contracts.
+- `aerobeat-web-style` owns generic theme tokens consumed through CSS custom properties.
+- `aerobeat-web-renderer` owns WebGL2 gameplay drawing attached through the grid host surface.
+- `aerobeat-web-video` owns camera/video lifecycle consumed by the preview presenter.
+- `aerobeat-web-vendor-beatsaver` owns browser provider acquisition and inspection.
+- `aerobeat-web-content-authoring` owns conversion, persistence and export.
+- `aerobeat-web-assembly` composes presenters and owns `aero-game`, commands, fullscreen execution and service policy.
 
-Component scenes live under `.testbed/scenes/` and representative states live under `.testbed/debug-data/`. Generated `.testbed/node_modules/@aerobeat/web-this-repo` is local state and must be recreated with:
+Runtime code imports only documented public package exports. Do not import sibling `src/`, testbed, internal or vendor-native surfaces.
 
-```bash
-npm run testbed:link-self
-```
+## Testbed and validation
 
-Do not commit installed `node_modules` folders or generated testbed symlinks.
+Component scenes live under `.testbed/scenes/`; representative state modules live under `.testbed/debug-data/`. Generated testbed links and installed modules remain uncommitted.
 
-## Validation
-
-Run before handoff:
+Run:
 
 ```bash
 npm run check
 npm test
 npm run test:browser
+npm pack --dry-run --json
 ```
 
-The current validators check JSDoc/no-escape posture, public import boundaries, component-only scenes, console-noise expectations, and the media pose preview browser composition path for feed visibility, fit/mirror metadata, and updating renderer overlay calls.
+Validation covers strict JSDoc/no-escape and public imports, named-component scenes, existing media-pose composition, product intent privacy, bounded BeatSaver results, content/calibration/gameplay/profile states, 390px layout, focusable names, live regions, reconnect listener exactness, package allowlisting and zero warning/error console noise.
 
-## Documentation Handoff
-
-Keep repo-local decisions in `docs/decisions/`. Public contributor docs belong in `aerobeat-web-docs` after components are accepted.
+Implementation decisions remain in `docs/decisions/`. Public contributor/user documentation belongs in `aerobeat-web-docs` after acceptance.

@@ -1,143 +1,75 @@
 // @ts-check
 
-import { aeroButtonActivateEventName, defineAeroButton } from "../../elements/aero-button/aero-button.js";
-import { defineAeroPoseFlowPanel } from "../../elements/aero-pose-flow-panel/aero-pose-flow-panel.js";
-import { defineAeroStatusPanel } from "../../elements/aero-status-panel/aero-status-panel.js";
+import { defineAeroMediaPosePreview } from "../../elements/aero-media-pose-preview/aero-media-pose-preview.js";
+import { AeroCalibrationBadge, AeroCapabilitiesPanel, AeroGridPlayfield, defineAeroProductPresenters } from "../../elements/aero-product-presenters.js";
+
+/** @typedef {Readonly<Record<string, unknown>>} AeroCalibrationCompositionSnapshot */
 
 /**
- * @typedef {"waiting" | "active"} AeroCalibrationState
- */
-
-/**
- * @typedef {Object} AeroCalibrationStateChangeDetail
- * @property {AeroCalibrationState} state Visible calibration state.
- * @property {string} status Human-readable calibration status.
- * @property {number} activationCount Number of begin activations in this screen instance.
- */
-
-/**
- * Public calibration screen events for assembly and tests.
- *
- * @type {Readonly<{
- *   start: "aero:calibration:start",
- *   stateChange: "aero:calibration:state-change"
- * }>}
- */
-export const aeroCalibrationEventNames = Object.freeze({
-  start: "aero:calibration:start",
-  stateChange: "aero:calibration:state-change"
-});
-
-/**
- * Component-only starter calibration screen.
+ * Automatic-calibration composition screen. The screen presents snapshots only;
+ * camera, pose math, calibration and capability policy stay with their owners.
  */
 export class AeroCalibrationScreen extends HTMLElement {
-  /**
-   * Creates the screen shadow DOM.
-   */
   constructor() {
     super();
-    /** @type {AeroCalibrationStateChangeDetail} */
-    this.state = {
-      state: "waiting",
-      status: "Waiting for live, video, or replay pose feed",
-      activationCount: 0
-    };
-    defineAeroButton();
-    defineAeroPoseFlowPanel();
-    defineAeroStatusPanel();
-    const root = this.attachShadow({ mode: "open" });
-    root.innerHTML = `
-      <style>
-        :host {
-          box-sizing: border-box;
-          display: grid;
-          min-height: 100%;
-          padding: var(--aero-space-6, 24px);
-          place-items: center;
-        }
-
-        .layout {
-          display: grid;
-          gap: var(--aero-space-4, 16px);
-          inline-size: min(100%, 520px);
-        }
-      </style>
-      <div class="layout">
-        <aero-status-panel heading="Camera calibration"></aero-status-panel>
-        <aero-pose-flow-panel
-          source-id="aero.movenet.replay.basic-upper-body"
-          timestamp-ms="0"
-          input-summary="boxing straight_left | boxing straight_right | boxing guard_enabled"
-        ></aero-pose-flow-panel>
-        <aero-button label="Begin calibration"></aero-button>
-      </div>
-    `;
-    root.addEventListener(aeroButtonActivateEventName, (event) => {
-      this.#handleCalibrationStart(event);
-    });
+    /** @type {AeroCalibrationCompositionSnapshot} */
+    this.screenSnapshot = Object.freeze({});
   }
 
-  /**
-   * Syncs current state when the element enters a document.
-   */
   connectedCallback() {
+    defineAeroMediaPosePreview();
+    defineAeroProductPresenters();
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.#render();
   }
 
-  /**
-   * @param {Event} event
-   * @returns {void}
-   */
-  #handleCalibrationStart(event) {
-    event.stopPropagation();
-    this.state = {
-      state: "active",
-      status: "Calibration active - align your shoulders in the rhythm field",
-      activationCount: this.state.activationCount + 1
-    };
+  disconnectedCallback() {
+    const preview = this.shadowRoot?.querySelector("aero-media-pose-preview");
+    if (preview instanceof HTMLElement && "clearPoseFrame" in preview && typeof preview.clearPoseFrame === "function") {
+      preview.clearPoseFrame();
+    }
+  }
+
+  /** @param {AeroCalibrationCompositionSnapshot} snapshot @returns {void} */
+  setSnapshot(snapshot) {
+    this.screenSnapshot = Object.freeze({ ...snapshot });
     this.#render();
-    this.#dispatchCalibrationEvent(aeroCalibrationEventNames.start);
-    this.#dispatchCalibrationEvent(aeroCalibrationEventNames.stateChange);
   }
 
-  /**
-   * @param {string} eventName
-   * @returns {void}
-   */
-  #dispatchCalibrationEvent(eventName) {
-    this.dispatchEvent(new CustomEvent(eventName, {
-      bubbles: true,
-      composed: true,
-      detail: {
-        ...this.state
-      }
-    }));
-  }
-
-  /**
-   * Updates visible calibration state.
-   *
-   * @returns {void}
-   */
+  /** @returns {void} */
   #render() {
-    const statusPanel = this.shadowRoot?.querySelector("aero-status-panel");
-    const button = this.shadowRoot?.querySelector("aero-button");
-    statusPanel?.setAttribute("status", this.state.status);
-    button?.setAttribute(
-      "label",
-      this.state.state === "active" ? "Calibration running" : "Begin calibration"
-    );
+    if (!this.shadowRoot || !this.isConnected) return;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { block-size: 100%; box-sizing: border-box; display: block; inline-size: 100%; min-block-size: 0; min-inline-size: 0; }
+        .layout { block-size: 100%; display: grid; gap: var(--aero-space-4, 16px); grid-template-columns: minmax(0, 1fr) minmax(18rem, .6fr); inline-size: 100%; padding: var(--aero-space-4, 16px); }
+        .preview { min-block-size: 16rem; min-inline-size: 0; position: relative; }
+        .preview > aero-media-pose-preview, .preview > aero-grid-playfield { block-size: 100%; inline-size: 100%; inset: 0; position: absolute; }
+        .status { align-content: start; display: grid; gap: var(--aero-space-3, 12px); min-inline-size: 0; overflow: auto; }
+        @media (max-width: 700px), (max-height: 440px) and (orientation: landscape) { .layout { grid-template-columns: 1fr; grid-template-rows: minmax(12rem, 1fr) auto; padding: 10px; } .status { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); } }
+      </style>
+      <section class="layout" part="layout" aria-label="Camera calibration">
+        <div class="preview" part="preview"><aero-media-pose-preview></aero-media-pose-preview><aero-grid-playfield></aero-grid-playfield></div>
+        <div class="status" part="status"><aero-calibration-badge></aero-calibration-badge><aero-capabilities-panel></aero-capabilities-panel></div>
+      </section>`;
+    const calibration = isRecord(this.screenSnapshot.calibration) ? this.screenSnapshot.calibration : Object.freeze({ state: "waiting" });
+    const capabilities = isRecord(this.screenSnapshot.capabilities) ? this.screenSnapshot.capabilities : Object.freeze({});
+    const grid = isRecord(this.screenSnapshot.grid) ? this.screenSnapshot.grid : Object.freeze({ mode: "calibration", dimmed: true, label: "Retained calibration grid" });
+    const badge = this.shadowRoot.querySelector("aero-calibration-badge");
+    if (badge instanceof AeroCalibrationBadge) badge.setSnapshot(calibration);
+    const capabilityPanel = this.shadowRoot.querySelector("aero-capabilities-panel");
+    if (capabilityPanel instanceof AeroCapabilitiesPanel) capabilityPanel.setSnapshot(capabilities);
+    const playfield = this.shadowRoot.querySelector("aero-grid-playfield");
+    if (playfield instanceof AeroGridPlayfield) playfield.setSnapshot(grid);
   }
 }
 
-/**
- * Defines `aero-calibration-screen` when it is not already registered.
- *
- * @returns {void}
- */
+/** Defines `aero-calibration-screen` idempotently. @returns {void} */
 export function defineAeroCalibrationScreen() {
-  if (!customElements.get("aero-calibration-screen")) {
-    customElements.define("aero-calibration-screen", AeroCalibrationScreen);
-  }
+  if (!customElements.get("aero-calibration-screen")) customElements.define("aero-calibration-screen", AeroCalibrationScreen);
+}
+
+/** @param {unknown} value @returns {value is Readonly<Record<string, unknown>>} */
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
