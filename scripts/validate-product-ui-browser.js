@@ -695,23 +695,69 @@ try {
       mapBrowser.setSnapshot({ state: "results", query: "Music", results: [{ mapId: "alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
       const library = document.createElement("aero-content-library");
       library.setAttribute("compact", "");
-      library.setSnapshot({ selectedPackageId: "package-beta", packages: [{ packageId: "package-alpha", name: "Alpha Package", variantCount: 2 }, { packageId: "package-beta", name: "Beta Package", variantCount: 3 }], usedBytes: 1024, quotaBytes: 4096 });
-      app.append(mapBrowser, library);
+      library.setSnapshot({ selectedPackageId: "package-beta", packages: [
+        { key: "alpha-one", packageId: "package-alpha-one", packageHash: `sha256:${"1".repeat(64)}`, songName: "Alpha Download", difficulty: "Hard", createdAtMs: 100, assetCount: 2, sourceCacheCount: 0 },
+        { key: "alpha-two", packageId: "package-alpha-two", packageHash: `sha256:${"2".repeat(64)}`, songName: "Alpha Download", difficulty: "Hard", createdAtMs: 200, assetCount: 2, sourceCacheCount: 0 },
+        { key: "beta", packageId: "package-beta", packageHash: `sha256:${"3".repeat(64)}`, songName: "Beta Download", difficulty: "Expert", createdAtMs: 300, assetCount: 2, sourceCacheCount: 0 }
+      ], usedBytes: 1024, quotaBytes: 4096 });
+      const emptyLibrary = document.createElement("aero-content-library");
+      emptyLibrary.setAttribute("compact", "");
+      emptyLibrary.setSnapshot({ selectedPackageId: "missing", packages: [] });
+      const oneLibrary = document.createElement("aero-content-library");
+      oneLibrary.setAttribute("compact", "");
+      oneLibrary.setSnapshot({ selectedPackageId: "missing", packages: [{ key: "one", packageId: "package-one", packageHash: `sha256:${"4".repeat(64)}`, songName: "Only Download", difficulty: "Normal", createdAtMs: 400, assetCount: 1, sourceCacheCount: 0 }] });
+      app.append(mapBrowser, library, emptyLibrary, oneLibrary);
       const hosts = [mapBrowser, library];
       const radios = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const buttons = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
       const selects = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("select") ?? [])]);
-      return {
-        labels: radios.map((radio) => radio.closest("label")?.querySelector("strong")?.textContent?.trim() ?? ""),
+      const localLabels = [...(library.shadowRoot?.querySelectorAll(".compact-library-choice span") ?? [])].map((label) => label.textContent?.trim() ?? "");
+      const localActions = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])];
+      const initialCheckedValues = hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? "");
+      const captured = [];
+      library.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
+      const secondDuplicate = library.shadowRoot?.querySelector("input[value='package-alpha-two']");
+      secondDuplicate?.focus();
+      secondDuplicate?.click();
+      const switched = captured.findLast((intent) => intent?.type === "library-select")?.payload?.packageId ?? "";
+      const switchedActionIds = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.value ?? "");
+      library.shadowRoot?.querySelector("button[data-intent='library-delete-request']")?.click();
+      const compactDeleteIntents = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.intent ?? "");
+      const compactDeleteIds = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.value ?? "");
+      const compactDeletePrompt = library.shadowRoot?.querySelector(".compact-library-actions [role='status']")?.textContent?.trim() ?? "";
+      library.shadowRoot?.querySelector("button[data-intent='library-delete-cancel']")?.click();
+      const compactDeleteCancelled = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.intent ?? "").join(",");
+      const currentControls = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])]);
+      const result = {
+        mapLabels: [...(mapBrowser.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])].map((radio) => radio.closest("label")?.querySelector("strong")?.textContent?.trim() ?? ""),
+        localLabels,
         checked: hosts.map((host) => host.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0),
-        checkedValues: hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? ""),
+        checkedValues: initialCheckedValues,
         actionButtons: buttons.length,
+        localActionIntents: localActions.map((button) => button.dataset.intent ?? ""),
+        localActionIds: localActions.map((button) => button.dataset.value ?? ""),
+        selectedActionAreas: library.shadowRoot?.querySelectorAll("[part='selected-actions']").length ?? 0,
+        noPlay: ![...buttons].some((button) => button.textContent?.trim() === "Play"),
+        switched,
+        switchedActionIds,
+        compactDeleteIntents,
+        compactDeleteIds,
+        compactDeletePrompt,
+        compactDeleteCancelled,
+        emptyRadios: emptyLibrary.shadowRoot?.querySelectorAll("input[type='radio']").length ?? -1,
+        emptyActions: emptyLibrary.shadowRoot?.querySelectorAll("button").length ?? -1,
+        emptyText: emptyLibrary.shadowRoot?.textContent ?? "",
+        oneChecked: oneLibrary.shadowRoot?.querySelector("input:checked")?.value ?? "",
+        oneActions: [...(oneLibrary.shadowRoot?.querySelectorAll("button") ?? [])].map((button) => button.dataset.intent ?? ""),
         selects: selects.length,
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        controlsVisible: [...radios, ...buttons, ...selects].every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.display !== "none"; })
+        controlsVisible: currentControls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.display !== "none"; })
       };
+      emptyLibrary.remove();
+      oneLibrary.remove();
+      return result;
     });
-    assert(Boolean(musicEvidence) && musicEvidence.labels.join("|") === "Alpha Song|Beta Song|Alpha Package|Beta Package" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 8 && musicEvidence.selects === 2 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
+    assert(Boolean(musicEvidence) && musicEvidence.mapLabels.join("|") === "Alpha Song|Beta Song" && musicEvidence.localLabels.join("|") === "Alpha Download · Hard · 1|Alpha Download · Hard · 2|Beta Download · Expert" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 6 && musicEvidence.localActionIntents.join(",") === "library-export,library-delete-request" && musicEvidence.localActionIds.every((id) => id === "package-beta") && musicEvidence.selectedActionAreas === 1 && musicEvidence.noPlay && musicEvidence.switched === "package-alpha-two" && musicEvidence.switchedActionIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeleteIntents.join(",") === "library-export,library-delete,library-delete-cancel" && musicEvidence.compactDeleteIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeletePrompt === "Delete Alpha Download · Hard · 2?" && musicEvidence.compactDeleteCancelled === "library-export,library-delete-request" && musicEvidence.emptyRadios === 0 && musicEvidence.emptyActions === 0 && musicEvidence.emptyText.includes("No downloaded songs") && musicEvidence.oneChecked === "package-one" && musicEvidence.oneActions.join(",") === "library-export,library-delete-request" && musicEvidence.selects === 2 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
     await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
     await musicPage.close();
   }
@@ -765,13 +811,15 @@ try {
       for (const host of Object.values(hosts)) host.removeAttribute("compact");
       const defaultMarkupRestored = Object.values(hosts).every((host, index) => (host.shadowRoot?.innerHTML ?? "") === defaultMarkup[index]);
       for (const host of Object.values(hosts)) host.setAttribute("compact", "");
+      const currentControls = Object.values(hosts).flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])]);
       return {
         visible,
         accessibilityNamesPresent,
         defaultCopyPreserved,
         defaultMarkupRestored,
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth || bounds.right > document.documentElement.clientWidth,
-        controlsValid: controls.every((control) => { const box = control.getBoundingClientRect(); const style = getComputedStyle(control); return style.display !== "none" && box.width >= 42 && box.height >= 42 && box.left >= 0 && box.right <= document.documentElement.clientWidth; })
+        controlsValid: currentControls.every((control) => { const box = control.getBoundingClientRect(); const style = getComputedStyle(control); return style.display !== "none" && box.width >= 42 && box.height >= 42 && box.left >= 0 && box.right <= document.documentElement.clientWidth; }),
+        invalidControls: currentControls.map((control) => { const box = control.getBoundingClientRect(); const style = getComputedStyle(control); return { tag: control.tagName, intent: control.dataset.intent ?? "", text: control.textContent?.trim() ?? "", display: style.display, width: box.width, height: box.height, left: box.left, right: box.right }; }).filter((entry) => entry.display === "none" || entry.width < 42 || entry.height < 42 || entry.left < 0 || entry.right > document.documentElement.clientWidth)
       };
 
       function visibleTextFragments(host) {
@@ -796,7 +844,7 @@ try {
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Import selected map"],
       empty: ["Search", "Latest", "Choose local ZIP"],
       importProgress: ["Converting · 63%", "Cancel import"],
-      library: ["Alpha Package", "Export", "Confirm delete", "Cancel", "Beta Package", "Export", "Delete"],
+      library: ["Alpha Package", "Beta Package", "Export", "Delete"],
       capabilities: ["Camera permission blocks play."],
       error: ["Camera permission is required.", "Try again"],
       fullscreen: ["Enter fullscreen"]

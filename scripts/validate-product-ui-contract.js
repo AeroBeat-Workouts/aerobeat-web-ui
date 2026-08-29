@@ -44,6 +44,8 @@ assert.ok(presenters.includes("handleDelegatedKeydown") && presenters.includes("
 assert.ok(presenters.includes('get compact()') && presenters.includes('set compact(value)') && presenters.includes(':host([compact])'), "Provider-neutral compact property/attribute contract is missing.");
 assert.ok(presenters.includes("compact-field-label") && presenters.includes("compact-critical") && presenters.includes("compact-identity"), "Compact accessibility/critical-state boundaries are missing.");
 assert.ok(presenters.includes('[part="storage"]') && presenters.includes('[part="items"] span[role="status"]') && presenters.includes('.choice-copy > .muted'), "Compact product-copy suppression boundaries are missing.");
+assert.ok(presenters.includes('readString(item, "songName"') && presenters.includes('readString(item, "difficulty"') && presenters.includes('part="selected-actions"'), "Compact library does not consume real authoring summaries with one selected action area.");
+assert.ok(presenters.includes("compactLibraryMarkup") && presenters.includes("compactLibraryBaseLabel") && presenters.includes("No downloaded songs."), "Compact quick-choice library states are incomplete.");
 assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "Calibration composition does not preserve media/render surfaces across snapshots.");
 for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
   assert.ok(presenters.includes(profileId), `Missing prototype profile ${profileId}`);

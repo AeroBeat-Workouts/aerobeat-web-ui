@@ -53,6 +53,12 @@ const sharedStyles = `
   :host([compact]) .card { padding: 8px; }
   :host([compact]) label { gap: 0; }
   :host([compact]) .compact-hide-when-clear { display: none; }
+  :host([compact]) .compact-library-choices { display: grid; gap: 6px; }
+  :host([compact]) .compact-library-choice { align-items: center; background: rgba(255,255,255,.88); border: 1px solid rgba(53,141,175,.42); border-radius: 10px; cursor: pointer; display: flex; font-size: 1rem; gap: 10px; min-block-size: 42px; padding: 0 10px; }
+  :host([compact]) .compact-library-choice:has(input:checked) { background: rgba(10,132,255,.18); border-color: var(--aero-color-focus,#0a84ff); box-shadow: inset 0 0 0 1px var(--aero-color-focus,#0a84ff); }
+  :host([compact]) .compact-library-choice input[type="radio"] { accent-color: var(--aero-color-focus,#0a84ff); block-size: 42px; flex: 0 0 42px; inline-size: 42px; margin: 0; padding: 0; }
+  :host([compact]) .compact-library-choice span { font-weight: 750; min-inline-size: 0; overflow-wrap: anywhere; }
+  :host([compact]) .compact-library-actions { border-block-start: 1px solid rgba(53,141,175,.32); margin-block-start: 2px; padding-block-start: 8px; }
   @media (max-width: 430px) { .panel { border-radius: 10px; padding: 12px; } .row > button { flex: 1 1 auto; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 `;
@@ -268,9 +274,23 @@ export class AeroContentImportProgress extends AeroPresenterElement {
 
 /** Locally authored package and quota presenter. */
 export class AeroContentLibrary extends AeroPresenterElement {
+  static observedAttributes = ["compact"];
+
   constructor() {
     super();
     this.pendingDeletePackageId = "";
+    this.pendingSelectedPackageId = "";
+  }
+
+  /** A host snapshot settles any optimistic compact radio selection. @param {AeroPresenterSnapshot} snapshot */
+  setSnapshot(snapshot) {
+    this.pendingSelectedPackageId = "";
+    super.setSnapshot(snapshot);
+  }
+
+  /** Compact changes the product composition, while removing it restores the default development markup. @param {string} name @param {string | null} oldValue @param {string | null} newValue */
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name === "compact" && oldValue !== newValue && this.isConnected) this.render();
   }
 
   render() {
@@ -278,10 +298,15 @@ export class AeroContentLibrary extends AeroPresenterElement {
     const used = readStorageBytes(this.presenterSnapshot, "usedBytes");
     const quota = readStorageBytes(this.presenterSnapshot, "quotaBytes");
     const error = readString(this.presenterSnapshot, "errorMessage", "");
-    const selectedPackageId = readString(this.presenterSnapshot, "selectedPackageId", "");
+    const snapshotSelectedPackageId = readString(this.presenterSnapshot, "selectedPackageId", "");
+    const selectedPackageId = this.pendingSelectedPackageId && packages.some((item) => readString(item, "packageId", "") === this.pendingSelectedPackageId) ? this.pendingSelectedPackageId : snapshotSelectedPackageId;
     const selectedPackageIndex = packages.findIndex((item) => readString(item, "packageId", "") === selectedPackageId);
     const checkedPackageIndex = packages.length ? Math.max(0, selectedPackageIndex) : -1;
     if (this.pendingDeletePackageId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeletePackageId)) this.pendingDeletePackageId = "";
+    if (this.compact) {
+      this.renderMarkup(compactLibraryMarkup(packages, checkedPackageIndex, this.pendingDeletePackageId, error));
+      return;
+    }
     this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards choice-radios" part="items" role="radiogroup" aria-label="Available library packages">${packages.map((item, index) => libraryItemMarkup(item, this.pendingDeletePackageId, index === checkedPackageIndex)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
   }
 
@@ -295,6 +320,16 @@ export class AeroContentLibrary extends AeroPresenterElement {
   /** @param {string} type @param {HTMLElement} target */
   onIntent(type, target) {
     const packageId = target.dataset.value ?? "";
+    if (type === "library-select") {
+      this.emitIntent(type, { packageId });
+      if (this.compact) {
+        this.pendingSelectedPackageId = packageId;
+        this.pendingDeletePackageId = "";
+        this.render();
+        queueMicrotask(() => [...(this.shadowRoot?.querySelectorAll("input[name='library-package-choice']") ?? [])].find((input) => input instanceof HTMLInputElement && input.value === packageId)?.focus());
+      }
+      return;
+    }
     if (type === "library-delete-request") {
       this.pendingDeletePackageId = packageId;
       this.render();
@@ -691,6 +726,46 @@ function statusText(state, count) { if (state === "loading") return "Loading Bea
 function mapResultMarkup(result, checked) { const id = readString(result, "mapId", ""); const name = readString(result, "name", "Untitled map"); const author = readString(result, "songAuthorName", "Unknown artist"); return `<article><label class="card choice-radio" part="result"><input type="radio" name="beatsaver-map-choice" value="${escapeAttribute(id)}" data-intent="beatsaver-select-map" data-value="${escapeAttribute(id)}" ${checked ? "checked" : ""}><span class="choice-copy"><strong>${escapeHtml(name)}</strong><span class="muted">${escapeHtml(author)} · ${escapeHtml(id)}</span></span></label></article>`; }
 /** @param {string} value @param {string} label @param {string} selected @returns {string} */
 function optionMarkup(value, label, selected) { return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`; }
+/** Compact quick-choice library using the real persistence-summary shape. @param {readonly Readonly<Record<string, unknown>>[]} packages @param {number} checkedIndex @param {string} pendingDeletePackageId @param {string} error @returns {string} */
+function compactLibraryMarkup(packages, checkedIndex, pendingDeletePackageId, error) {
+  const usable = packages.map((item, sourceIndex) => ({ item, sourceIndex, id: readString(item, "packageId", ""), base: compactLibraryBaseLabel(item) })).filter((entry) => entry.id !== "");
+  const checked = usable.findIndex((entry) => entry.sourceIndex === checkedIndex);
+  const checkedUsableIndex = usable.length ? Math.max(0, checked) : -1;
+  const totals = new Map();
+  for (const entry of usable) totals.set(entry.base, (totals.get(entry.base) ?? 0) + 1);
+  const positions = new Map();
+  /** @type {string[]} */
+  const labels = [];
+  const choices = usable.map((entry, index) => {
+    const position = (positions.get(entry.base) ?? 0) + 1;
+    positions.set(entry.base, position);
+    const label = (totals.get(entry.base) ?? 0) > 1 ? `${entry.base} · ${position}` : entry.base;
+    labels[index] = label;
+    return `<label class="compact-library-choice" part="item"><input type="radio" name="library-package-choice" value="${escapeAttribute(entry.id)}" data-intent="library-select" data-value="${escapeAttribute(entry.id)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedUsableIndex ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
+  }).join("");
+  const selected = checkedUsableIndex >= 0 ? usable[checkedUsableIndex] : null;
+  const actions = selected ? compactLibraryActions(selected.item, pendingDeletePackageId, labels[checkedUsableIndex] ?? selected.base) : "";
+  return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}</section>`;
+}
+
+/** @param {Readonly<Record<string, unknown>>} item @returns {string} */
+function compactLibraryBaseLabel(item) {
+  const songName = readString(item, "songName", readString(item, "name", "Downloaded song"));
+  const difficulty = readString(item, "difficulty", "");
+  return difficulty ? `${songName} · ${difficulty}` : songName;
+}
+
+/** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {string} label @returns {string} */
+function compactLibraryActions(item, pendingDeletePackageId, label) {
+  const id = readString(item, "packageId", "");
+  const accessibleLabel = escapeAttribute(label);
+  const pending = id !== "" && id === pendingDeletePackageId;
+  const deleteControls = pending
+    ? `<span role="status">Delete ${escapeHtml(label)}?</span><button type="button" aria-label="Confirm delete ${accessibleLabel}" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm</button><button type="button" aria-label="Cancel deleting ${accessibleLabel}" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
+    : `<button type="button" aria-label="Delete ${accessibleLabel}" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
+  return `<div class="row compact-library-actions" part="selected-actions" aria-label="Selected song actions"><button type="button" aria-label="Export ${accessibleLabel}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div>`;
+}
+
 /** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {boolean} checked @returns {string} */
 function libraryItemMarkup(item, pendingDeletePackageId, checked) {
   const id = readString(item, "packageId", "");
