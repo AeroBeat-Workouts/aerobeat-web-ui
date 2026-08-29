@@ -29,7 +29,7 @@ try {
   assert(result.browserStateTexts.loading.includes("Loading") && result.browserStateTexts.empty.includes("No compatible") && result.browserStateTexts.failed.includes("Provider unavailable"), "BeatSaver loading/empty/error states were incomplete.");
   assert(result.searchStatus.includes("50 maps"), "Bounded result count was not announced.");
   assert(result.importStatus.includes("63%"), "Conversion progress was not announced.");
-  assert(result.libraryButtons === 3, "Library select/export/delete controls were not rendered.");
+  assert(result.libraryButtons === 2, "Library Export/Delete action buttons were not rendered independently of package selection radios.");
   assert(result.calibrationProgress === "0.75", "Calibration hold progress was not exposed.");
   for (const state of ["waiting", "holding", "cooldown", "calibrated", "error"]) assert(result.calibrationStateTexts[state].length > 0, `Calibration ${state} state was not announced.`);
   assert(result.capabilityLabels === 8, "Capability availability was incomplete.");
@@ -272,6 +272,56 @@ try {
     gameplayFallback.shadowRoot?.querySelector("input[value='semantic-row']")?.click();
     const scopedReconnectIntentCount = captured.filter((intent) => intent.type === "prototype-select").length - beforeDetachedScoped;
 
+    const mapSnapshot = (selectedMapId) => ({ state: "results", results: [{ mapId: "map-alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "map-beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: selectedMapId, name: "Selected Song", songAuthorName: "Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
+    const currentMapBrowser = document.createElement("aero-beatsaver-browser");
+    const fallbackMapBrowser = document.createElement("aero-beatsaver-browser");
+    const emptyMapBrowser = document.createElement("aero-beatsaver-browser");
+    currentMapBrowser.setSnapshot(mapSnapshot("map-beta"));
+    fallbackMapBrowser.setSnapshot(mapSnapshot("map-missing"));
+    emptyMapBrowser.setSnapshot({ state: "empty", results: [] });
+    document.body.append(currentMapBrowser, fallbackMapBrowser, emptyMapBrowser);
+    const currentMapChecked = currentMapBrowser.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const fallbackMapChecked = fallbackMapBrowser.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const mapCheckedCounts = [currentMapBrowser, fallbackMapBrowser, emptyMapBrowser].map((host) => host.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? -1);
+    const mapActionButtons = [...(currentMapBrowser.shadowRoot?.querySelectorAll("button") ?? [])];
+    const mapSelects = [...(currentMapBrowser.shadowRoot?.querySelectorAll("select") ?? [])];
+    const beforeMapSelect = captured.filter((intent) => intent.type === "beatsaver-select-map").length;
+    const alphaMapRadio = currentMapBrowser.shadowRoot?.querySelector("input[value='map-alpha']");
+    alphaMapRadio?.focus();
+    alphaMapRadio?.click();
+    currentMapBrowser.setSnapshot(mapSnapshot("map-alpha"));
+    const mapFocusPreserved = currentMapBrowser.shadowRoot?.activeElement?.value === "map-alpha";
+    const mapSelectIntents = captured.filter((intent) => intent.type === "beatsaver-select-map").slice(beforeMapSelect);
+    const detachedMapRadio = currentMapBrowser.shadowRoot?.querySelector("input[value='map-beta']");
+    currentMapBrowser.remove();
+    const beforeMapReconnect = captured.filter((intent) => intent.type === "beatsaver-select-map").length;
+    detachedMapRadio?.click();
+    document.body.append(currentMapBrowser);
+    currentMapBrowser.shadowRoot?.querySelector("input[value='map-beta']")?.click();
+    const mapReconnectIntentCount = captured.filter((intent) => intent.type === "beatsaver-select-map").length - beforeMapReconnect;
+
+    const packageSnapshot = (selectedPackageId) => ({ selectedPackageId, packages: [{ packageId: "package-alpha", name: "Alpha Package", variantCount: 2 }, { packageId: "package-beta", name: "Beta Package", variantCount: 3 }], usedBytes: 1024, quotaBytes: 4096 });
+    const currentLibrary = document.createElement("aero-content-library");
+    const fallbackLibrary = document.createElement("aero-content-library");
+    const emptyLibrary = document.createElement("aero-content-library");
+    currentLibrary.setSnapshot(packageSnapshot("package-beta"));
+    fallbackLibrary.setSnapshot(packageSnapshot("package-missing"));
+    emptyLibrary.setSnapshot({ selectedPackageId: "package-missing", packages: [] });
+    document.body.append(currentLibrary, fallbackLibrary, emptyLibrary);
+    const currentPackageChecked = currentLibrary.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const fallbackPackageChecked = fallbackLibrary.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const packageCheckedCounts = [currentLibrary, fallbackLibrary, emptyLibrary].map((host) => host.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? -1);
+    const libraryActionButtons = [...(currentLibrary.shadowRoot?.querySelectorAll("button") ?? [])];
+    const beforeLibrarySelect = captured.filter((intent) => intent.type === "library-select").length;
+    const alphaPackageRadio = currentLibrary.shadowRoot?.querySelector("input[value='package-alpha']");
+    alphaPackageRadio?.focus();
+    alphaPackageRadio?.click();
+    currentLibrary.setSnapshot(packageSnapshot("package-alpha"));
+    const libraryFocusPreserved = currentLibrary.shadowRoot?.activeElement?.value === "package-alpha";
+    const librarySelectIntents = captured.filter((intent) => intent.type === "library-select").slice(beforeLibrarySelect);
+    const musicInstancesIndependent = fallbackMapBrowser.shadowRoot?.querySelector("input:checked")?.value === "map-alpha" && fallbackLibrary.shadowRoot?.querySelector("input:checked")?.value === "package-alpha";
+    const musicRadiosVisible = [currentMapBrowser, fallbackMapBrowser, currentLibrary, fallbackLibrary].flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]).every((radio) => { const style = getComputedStyle(radio); const bounds = radio.getBoundingClientRect(); return style.appearance !== "none" && style.visibility === "visible" && bounds.width >= 42 && bounds.height >= 42; });
+
     const module = await import("/src/index.js");
     module.defineAeroUiElements();
     module.defineAeroUiElements();
@@ -329,6 +379,12 @@ try {
     visualsSelector.remove();
     gameplayFallback.remove();
     visualFallback.remove();
+    currentMapBrowser.remove();
+    fallbackMapBrowser.remove();
+    emptyMapBrowser.remove();
+    currentLibrary.remove();
+    fallbackLibrary.remove();
+    emptyLibrary.remove();
     return {
       arrowProfileId,
       focusedRadioId,
@@ -364,6 +420,25 @@ try {
       visualFallbackId,
       scopedAtomicRejection,
       scopedReconnectIntentCount,
+      currentMapChecked,
+      fallbackMapChecked,
+      mapCheckedCounts,
+      mapActionButtonTypes: mapActionButtons.map((button) => button.type),
+      mapActionIntents: mapActionButtons.map((button) => button.dataset.intent ?? "search-submit"),
+      mapSelectCount: mapSelects.length,
+      mapSelectTags: mapSelects.map((select) => select.tagName),
+      mapFocusPreserved,
+      mapSelectIntents,
+      mapReconnectIntentCount,
+      currentPackageChecked,
+      fallbackPackageChecked,
+      packageCheckedCounts,
+      libraryActionButtonTypes: libraryActionButtons.map((button) => button.type),
+      libraryActionIntents: libraryActionButtons.map((button) => button.dataset.intent ?? ""),
+      libraryFocusPreserved,
+      librarySelectIntents,
+      musicInstancesIndependent,
+      musicRadiosVisible,
       idempotentDefinition,
       scalarPayloadsOnly,
       compactAttributeRoundtrip,
@@ -405,6 +480,29 @@ try {
     return returned;
   });
   assert(scopedArrow.checked === "semantic-cut" && scopedArrow.focused === "semantic-cut" && scopedTabExited && scopedTabReturned === "semantic-cut", "Scoped native radio Arrow/Tab keyboard behavior failed.");
+  await page.evaluate(() => {
+    const browser = document.createElement("aero-beatsaver-browser");
+    browser.id = "music-map-keyboard-test";
+    browser.setSnapshot({ state: "results", results: [{ mapId: "alpha", name: "Alpha", songAuthorName: "Artist" }, { mapId: "beta", name: "Beta", songAuthorName: "Artist" }], selectedMap: { mapId: "alpha", name: "Alpha", songAuthorName: "Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
+    document.body.append(browser);
+    browser.shadowRoot?.querySelector("input:checked")?.focus();
+  });
+  await page.keyboard.press("ArrowRight");
+  const mapKeyboardArrow = await page.evaluate(() => { const host = document.querySelector("#music-map-keyboard-test"); return { checked: host?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: host?.shadowRoot?.activeElement?.value ?? "" }; });
+  await page.keyboard.press("Tab");
+  const mapKeyboardTab = await page.evaluate(() => { const host = document.querySelector("#music-map-keyboard-test"); const intent = host?.shadowRoot?.activeElement?.dataset?.intent ?? ""; host?.remove(); return intent; });
+  await page.evaluate(() => {
+    const library = document.createElement("aero-content-library");
+    library.id = "music-library-keyboard-test";
+    library.setSnapshot({ selectedPackageId: "alpha", packages: [{ packageId: "alpha", name: "Alpha", variantCount: 1 }, { packageId: "beta", name: "Beta", variantCount: 1 }] });
+    document.body.append(library);
+    library.shadowRoot?.querySelector("input:checked")?.focus();
+  });
+  await page.keyboard.press("ArrowRight");
+  const libraryKeyboardArrow = await page.evaluate(() => { const host = document.querySelector("#music-library-keyboard-test"); return { checked: host?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: host?.shadowRoot?.activeElement?.value ?? "" }; });
+  await page.keyboard.press("Tab");
+  const libraryKeyboardTab = await page.evaluate(() => { const host = document.querySelector("#music-library-keyboard-test"); const intent = host?.shadowRoot?.activeElement?.dataset?.intent ?? ""; const value = host?.shadowRoot?.activeElement?.dataset?.value ?? ""; host?.remove(); return { intent, value }; });
+  assert(mapKeyboardArrow.checked === "beta" && mapKeyboardArrow.focused === "beta" && mapKeyboardTab === "beatsaver-version-select" && libraryKeyboardArrow.checked === "beta" && libraryKeyboardArrow.focused === "beta" && libraryKeyboardTab.intent === "library-export" && libraryKeyboardTab.value === "beta", "Music native radio Arrow/Tab keyboard behavior failed.");
   assert(adversarial.arrowProfileId === "flow" && adversarial.focusedRadioId === "flow", "Arrow-key radio navigation did not wrap, select and focus the adjacent profile.");
   assert(adversarial.radioTabIndexes.filter((value) => value === 0).length === 1, "Prototype radio group did not expose one roving tab stop.");
   assert(adversarial.deleteBeforeConfirm === 0 && adversarial.confirmationVisible && adversarial.confirmedDelete === "confirm-package", "Library deletion did not require explicit confirmation.");
@@ -423,6 +521,14 @@ try {
   assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
   assert(adversarial.gameplayFallbackId === "flow" && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
   assert(adversarial.scopedAtomicRejection && adversarial.scopedReconnectIntentCount === 1, `Scoped selector atomicity or reconnect listener exactness regressed: ${JSON.stringify({ atomic: adversarial.scopedAtomicRejection, reconnectIntents: adversarial.scopedReconnectIntentCount })}`);
+  assert(adversarial.currentMapChecked === "map-beta" && adversarial.fallbackMapChecked === "map-alpha" && adversarial.mapCheckedCounts.join(",") === "1,1,0", "BeatSaver radios did not preserve current selection, first fallback, and empty truth.");
+  assert(adversarial.currentPackageChecked === "package-beta" && adversarial.fallbackPackageChecked === "package-alpha" && adversarial.packageCheckedCounts.join(",") === "1,1,0", "Library radios did not preserve current selection, first fallback, and empty truth.");
+  assert(adversarial.mapActionButtonTypes.join(",") === "submit,button,button,button" && adversarial.mapActionIntents.join(",") === "search-submit,beatsaver-latest,local-zip-request,beatsaver-import", "BeatSaver actions no longer remain buttons.");
+  assert(adversarial.mapSelectCount === 2 && adversarial.mapSelectTags.every((tag) => tag === "SELECT"), "BeatSaver Version/Difficulty no longer remain native selects.");
+  assert(adversarial.libraryActionButtonTypes.every((type) => type === "button") && adversarial.libraryActionIntents.join(",") === "library-export,library-delete-request,library-export,library-delete-request", "Library Export/Delete actions no longer remain buttons.");
+  assert(adversarial.mapSelectIntents.length === 1 && adversarial.mapSelectIntents[0].payload.mapId === "map-alpha" && adversarial.librarySelectIntents.length === 1 && adversarial.librarySelectIntents[0].payload.packageId === "package-alpha", "Music radio intents changed scalar IDs or emitted more than once.");
+  assert(adversarial.mapFocusPreserved && adversarial.libraryFocusPreserved && adversarial.mapReconnectIntentCount === 1 && adversarial.musicInstancesIndependent, "Music selection focus, reconnect, or multi-instance isolation regressed.");
+  assert(adversarial.musicRadiosVisible, "Music choices were not visibly native 42px radio inputs.");
   assert(adversarial.idempotentDefinition && adversarial.scalarPayloadsOnly, "Definition or scalar-only event contracts failed.");
   assert(adversarial.compactAttributeRoundtrip && adversarial.compactHeadingsSuppressed && adversarial.compactMetadataSuppressed, "Compact property/attribute did not visually suppress only designated headings and metadata.");
   assert(adversarial.compactControlsActionable, "Compact mode hid or undersized an actionable control.");
@@ -572,6 +678,42 @@ try {
     assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Semantic Row|Spatial Row|Semantic Cut|Spatial Cut" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} scoped product selector evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
     await scopedPage.close();
+  }
+  for (const viewport of [
+    { name: "phone-portrait", width: 390, height: 844 },
+    { name: "phone-landscape", width: 844, height: 390 }
+  ]) {
+    const musicPage = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, reducedMotion: "reduce" });
+    await musicPage.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
+    await musicPage.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
+    const musicEvidence = await musicPage.evaluate(() => {
+      const app = document.querySelector("#app");
+      if (!(app instanceof HTMLElement)) return null;
+      app.replaceChildren();
+      const mapBrowser = document.createElement("aero-beatsaver-browser");
+      mapBrowser.setAttribute("compact", "");
+      mapBrowser.setSnapshot({ state: "results", query: "Music", results: [{ mapId: "alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
+      const library = document.createElement("aero-content-library");
+      library.setAttribute("compact", "");
+      library.setSnapshot({ selectedPackageId: "package-beta", packages: [{ packageId: "package-alpha", name: "Alpha Package", variantCount: 2 }, { packageId: "package-beta", name: "Beta Package", variantCount: 3 }], usedBytes: 1024, quotaBytes: 4096 });
+      app.append(mapBrowser, library);
+      const hosts = [mapBrowser, library];
+      const radios = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
+      const buttons = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
+      const selects = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("select") ?? [])]);
+      return {
+        labels: radios.map((radio) => radio.closest("label")?.querySelector("strong")?.textContent?.trim() ?? ""),
+        checked: hosts.map((host) => host.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0),
+        checkedValues: hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? ""),
+        actionButtons: buttons.length,
+        selects: selects.length,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        controlsVisible: [...radios, ...buttons, ...selects].every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.display !== "none"; })
+      };
+    });
+    assert(Boolean(musicEvidence) && musicEvidence.labels.join("|") === "Alpha Song|Beta Song|Alpha Package|Beta Package" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 8 && musicEvidence.selects === 2 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
+    await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
+    await musicPage.close();
   }
 } finally {
   await browser.close();

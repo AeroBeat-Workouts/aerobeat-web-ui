@@ -33,6 +33,10 @@ for (const forbidden of ["100vh", "aerobeat-app", "indexedDB.open", "getUserMedi
 assert.ok(presenters.includes('"aero:ui:intent"'), "Public UI intent event is missing.");
 assert.ok(presenters.includes("bubbles: true, composed: true"), "UI intents are not bubbling and composed.");
 assert.ok(presenters.includes("slice(0, 50)"), "BeatSaver result rendering is not deterministically bounded.");
+assert.ok(presenters.includes('name="beatsaver-map-choice"') && presenters.includes('data-intent="beatsaver-select-map"'), "BeatSaver map choices are not native scalar-intent radios.");
+assert.ok(presenters.includes('name="library-package-choice"') && presenters.includes('data-intent="library-select"') && presenters.includes('"selectedPackageId"'), "Library package choices are not selected native scalar-intent radios.");
+for (const action of ["beatsaver-latest", "local-zip-request", "beatsaver-import", "library-export", "library-delete-request"]) assert.ok(presenters.includes(`data-intent="${action}"`), `Music action ${action} is missing.`);
+assert.ok(presenters.includes('part="version-select"') && presenters.includes('part="difficulty-select"'), "Version/Difficulty native selects are missing.");
 assert.ok(presenters.includes("getRenderSurface()"), "Grid host lacks a public renderer attachment seam.");
 assert.ok(presenters.includes("local-zip-request") && !presenters.includes("file.arrayBuffer"), "Local ZIP intent must not carry file bytes.");
 assert.ok(presenters.includes("fullscreen-exit") && presenters.includes("library-delete-request"), "Fullscreen exit or delete confirmation intent is missing.");

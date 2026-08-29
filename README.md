@@ -12,9 +12,9 @@ The embeddable product root is `aero-game`, owned by `aerobeat-web-assembly`. Th
 
 `src/elements/aero-product-presenters.js` exports the Task 9 presenter set and the single `aero:ui:intent` event contract:
 
-- `aero-beatsaver-browser`: bounded search/latest/results/detail/version/difficulty and local-ZIP-picker intents.
+- `aero-beatsaver-browser`: bounded search/latest/results/detail/version/difficulty and local-ZIP-picker intents. Populated map results are one native radio group checked from a valid `selectedMap.mapId`, otherwise the first result.
 - `aero-content-import-progress`: acquisition/conversion/persistence progress and cancellation intent.
-- `aero-content-library`: authored packages, bounded quota truth, select/export, and explicit two-step delete-confirmation intents.
+- `aero-content-library`: authored packages, bounded quota truth, select/export, and explicit two-step delete-confirmation intents. Populated package choices are one native radio group checked from a valid scalar `selectedPackageId`, otherwise the first package; export and delete remain actions.
 - `aero-calibration-badge` and `aero-calibration-screen`: automatic T-pose waiting/holding/cooldown/ready/loss composition and explicit reset intent.
 - `aero-grid-playfield`: visible shared 4×3 renderer host; `getRenderSurface()` is the public attachment seam.
 - `aero-flow-hud`, `aero-boxing-track-hud`, `aero-boxing-spatial-hud`: mode-specific presentation only.
