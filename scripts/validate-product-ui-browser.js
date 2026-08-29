@@ -715,6 +715,104 @@ try {
     await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
     await musicPage.close();
   }
+  for (const viewport of [
+    { name: "phone-portrait", width: 390, height: 844 },
+    { name: "phone-landscape", width: 844, height: 390 }
+  ]) {
+    const allowlistPage = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, reducedMotion: "reduce" });
+    await allowlistPage.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
+    await allowlistPage.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
+    const allowlistEvidence = await allowlistPage.evaluate(() => {
+      const app = document.querySelector("#app");
+      const sourceSelector = document.querySelector("aero-prototype-selector");
+      if (!(app instanceof HTMLElement) || !sourceSelector) return null;
+      const gameplay = document.createElement("aero-prototype-selector");
+      gameplay.setAttribute("scope", "gameplay");
+      gameplay.setSnapshot({ selectedProfileId: "flow", sessionState: "idle" });
+      const visuals = document.createElement("aero-prototype-selector");
+      visuals.setAttribute("scope", "visuals");
+      visuals.setSnapshot(sourceSelector.presenterSnapshot);
+      const populated = document.createElement("aero-beatsaver-browser");
+      populated.setSnapshot({ state: "results", query: "", results: [{ mapId: "hidden-map-alpha", name: "Alpha Song", songAuthorName: "Hidden Alpha Author" }, { mapId: "hidden-map-beta", name: "Beta Song", songAuthorName: "Hidden Beta Author" }], selectedMap: { mapId: "hidden-map-beta", name: "Redundant Beta Selection", songAuthorName: "Hidden Selected Author", levelAuthorName: "Hidden Mapper" }, versions: [{ versionHash: "f".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "f".repeat(40), selectedDifficulty: "Hard" });
+      const empty = document.createElement("aero-beatsaver-browser");
+      empty.setSnapshot({ state: "empty", query: "", results: [] });
+      const importProgress = document.createElement("aero-content-import-progress");
+      importProgress.setSnapshot({ state: "converting", progress: 0.63, jobId: "hidden-job-id" });
+      const library = document.createElement("aero-content-library");
+      library.setSnapshot({ selectedPackageId: "hidden-package-beta", usedBytes: 123456, quotaBytes: 999999, packages: [{ packageId: "hidden-package-alpha", name: "Alpha Package", variantCount: 2 }, { packageId: "hidden-package-beta", name: "Beta Package", variantCount: 3 }] });
+      const capabilities = document.createElement("aero-capabilities-panel");
+      capabilities.setSnapshot({ camera: false, fullscreen: true, autoplay: true, webgl2: true, indexedDb: true, worker: true, directBeatSaverCors: true, localZipImport: true, limitations: ["Camera permission blocks play."] });
+      const error = document.createElement("aero-error-panel");
+      error.setSnapshot({ code: "hidden_error_code", message: "Camera permission is required.", retryable: true });
+      const fullscreen = document.createElement("aero-fullscreen-button");
+      fullscreen.setSnapshot({ supported: true, active: false, requestPending: false, errorCode: null });
+      const hosts = { gameplay, visuals, populated, empty, importProgress, library, capabilities, error, fullscreen };
+      app.replaceChildren(...Object.values(hosts));
+      library.shadowRoot?.querySelector("button[data-intent='library-delete-request'][data-value='hidden-package-alpha']")?.click();
+      const defaultMarkup = Object.values(hosts).map((host) => host.shadowRoot?.innerHTML ?? "");
+      const defaultVisibleCopy = `${visibleTextFragments(populated).join(" ")} ${visibleTextFragments(library).join(" ")}`;
+      const defaultCopyPreserved = ["Hidden Alpha Author", "hidden-map-alpha", "Redundant Beta Selection", "Hidden Mapper", "used", "2 playable variants"].every((text) => defaultVisibleCopy.includes(text));
+      for (const host of Object.values(hosts)) host.setAttribute("compact", "");
+      const visible = Object.fromEntries(Object.entries(hosts).map(([name, host]) => [name, visibleTextFragments(host)]));
+      const controls = Object.values(hosts).flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])]);
+      const bounds = app.getBoundingClientRect();
+      const accessibilityNamesPresent = controls.every((control) => {
+        const aria = control.getAttribute("aria-label")?.trim() ?? "";
+        const text = control.textContent?.trim() ?? "";
+        const label = control.closest("label")?.textContent?.trim() ?? "";
+        return aria !== "" || text !== "" || label !== "";
+      });
+      for (const host of Object.values(hosts)) host.removeAttribute("compact");
+      const defaultMarkupRestored = Object.values(hosts).every((host, index) => (host.shadowRoot?.innerHTML ?? "") === defaultMarkup[index]);
+      for (const host of Object.values(hosts)) host.setAttribute("compact", "");
+      return {
+        visible,
+        accessibilityNamesPresent,
+        defaultCopyPreserved,
+        defaultMarkupRestored,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth || bounds.right > document.documentElement.clientWidth,
+        controlsValid: controls.every((control) => { const box = control.getBoundingClientRect(); const style = getComputedStyle(control); return style.display !== "none" && box.width >= 42 && box.height >= 42 && box.left >= 0 && box.right <= document.documentElement.clientWidth; })
+      };
+
+      function visibleTextFragments(host) {
+        const fragments = [];
+        if (!host.shadowRoot) return fragments;
+        const walker = document.createTreeWalker(host.shadowRoot, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const parent = node.parentElement;
+          const text = node.textContent?.replaceAll(/\s+/gu, " ").trim() ?? "";
+          if (!parent || text === "" || parent.closest("style,script,option")) continue;
+          const style = getComputedStyle(parent);
+          const box = parent.getBoundingClientRect();
+          if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || box.width <= 1 || box.height <= 1) continue;
+          fragments.push(text);
+        }
+        return fragments;
+      }
+    });
+    const expectedVisible = {
+      gameplay: ["Flow", "Semantic Row", "Spatial Row", "Semantic Cut", "Spatial Cut"],
+      visuals: ["Default", "Compact"],
+      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Import selected map"],
+      empty: ["Search", "Latest", "Choose local ZIP"],
+      importProgress: ["Converting · 63%", "Cancel import"],
+      library: ["Alpha Package", "Export", "Confirm delete", "Cancel", "Beta Package", "Export", "Delete"],
+      capabilities: ["Camera permission blocks play."],
+      error: ["Camera permission is required.", "Try again"],
+      fullscreen: ["Enter fullscreen"]
+    };
+    assert(Boolean(allowlistEvidence) && JSON.stringify(allowlistEvidence.visible) === JSON.stringify(expectedVisible), `${viewport.name} compact composed visible-text allowlist failed: ${JSON.stringify(allowlistEvidence?.visible)}.`);
+    assert(Boolean(allowlistEvidence) && allowlistEvidence.accessibilityNamesPresent && allowlistEvidence.defaultCopyPreserved && allowlistEvidence.defaultMarkupRestored && !allowlistEvidence.overflow && allowlistEvidence.controlsValid, `${viewport.name} compact allowlist accessibility/default/bounds failed: ${JSON.stringify(allowlistEvidence)}.`);
+    const accessibleNameCounts = await Promise.all([
+      allowlistPage.getByRole("radio", { name: "Alpha Song", exact: true }).count(),
+      allowlistPage.getByRole("radio", { name: "Select Beta Package", exact: true }).count(),
+      allowlistPage.getByRole("textbox", { name: "Search maps", exact: true }).count(),
+      allowlistPage.getByRole("combobox", { name: "Version", exact: true }).count()
+    ]);
+    assert(accessibleNameCounts.join(",") === "1,1,2,1", `${viewport.name} compact controls lost exact accessible names: ${accessibleNameCounts.join(",")}.`);
+    await allowlistPage.screenshot({ path: `screenshots/task12-ui-compact-copy-allowlist-${viewport.name}.png`, fullPage: true });
+    await allowlistPage.close();
+  }
 } finally {
   await browser.close();
   await server.close();

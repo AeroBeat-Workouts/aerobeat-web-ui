@@ -47,6 +47,8 @@ const sharedStyles = `
   :host([compact]) h1, :host([compact]) h2, :host([compact]) h3, :host([compact]) .compact-field-label, :host([compact]) .compact-converter-truth { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
   :host([compact]) .compact-explanatory, :host([compact]) .compact-identity, :host([compact]) .compact-telemetry, :host([compact]) .muted:not(.live):not(.compact-critical):not(.compact-converter-truth), :host([compact]) .pill:not(.error) { display: none; }
   :host([compact]) .compact-status:not(.error) { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
+  :host([compact]) [part="storage"], :host([compact]) [part="detail"] > p, :host([compact]) .choice-copy > .muted { display: none; }
+  :host([compact]) [part="items"] span[role="status"] { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
   :host([compact]) .cards { grid-template-columns: minmax(0, 1fr); }
   :host([compact]) .card { padding: 8px; }
   :host([compact]) label { gap: 0; }
