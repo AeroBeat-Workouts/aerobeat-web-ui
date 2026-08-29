@@ -40,5 +40,8 @@ assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "C
 for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
   assert.ok(presenters.includes(profileId), `Missing prototype profile ${profileId}`);
 }
+for (const profileClass of ["live_visual", "between_run_ruleset", "converter_regeneration"]) assert.ok(presenters.includes(`\"${profileClass}\"`), `Missing profile class ${profileClass}.`);
+for (const field of ["selectedContentHash", "appliedContentHash", "pendingContentHash", "experimental", "regenerationRequired"]) assert.ok(presenters.includes(field), `Missing bounded profile state field ${field}.`);
+for (const forbiddenProfileFeature of ["survey", "winner", "preference", "leaderboard"]) assert.equal(presenters.toLowerCase().includes(forbiddenProfileFeature), false, `Profile presenter contains forbidden promotion feature ${forbiddenProfileFeature}.`);
 assert.ok(index.includes("defineAeroProductPresenters"), "Root package does not register product presenters.");
 console.log("Product UI public contract validation passed.");

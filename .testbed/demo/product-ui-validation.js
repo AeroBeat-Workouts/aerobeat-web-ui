@@ -80,9 +80,10 @@ app.append(capabilities);
 
 const selector = document.createElement("aero-prototype-selector");
 if (!(selector instanceof AeroPrototypeSelector)) throw new Error("Prototype selector registration failed.");
-selector.setSnapshot({ selectedProfileId: "semantic-row", tuningIdentities: [
-  { profileId: "ocean-visual", profileVersion: "1", contentHash: "abc123", class: "live_visual", regenerationRequired: false },
-  { profileId: "row-family", profileVersion: "1", contentHash: "def456", class: "converter_regeneration", regenerationRequired: true }
+selector.setSnapshot({ selectedProfileId: "semantic-row", sessionState: "playing", profileClasses: [
+  { class: "live_visual", active: { profileId: "aero.visual.default", profileVersion: "1.0.0", contentHash: "fdcf478c91e21ef88970299e29fcc35d574bfe69e0d7d00d9f823ee9507f39a3", class: "live_visual", experimental: true, regenerationRequired: false }, profiles: [{ profileId: "aero.visual.default", profileVersion: "1.0.0", contentHash: "fdcf478c91e21ef88970299e29fcc35d574bfe69e0d7d00d9f823ee9507f39a3", class: "live_visual", experimental: true, regenerationRequired: false }, { profileId: "aero.visual.compact", profileVersion: "1.0.0", contentHash: "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", class: "live_visual", experimental: true, regenerationRequired: false }] },
+  { class: "between_run_ruleset", active: { profileId: "aero.scoring.locked", profileVersion: "1.0.0", contentHash: "0df07b0502381012cc6f46da3c99edd4a5f4999731e54a440a2785f830c5bda5", class: "between_run_ruleset", experimental: true, regenerationRequired: false }, profiles: [{ profileId: "aero.scoring.locked", profileVersion: "1.0.0", contentHash: "0df07b0502381012cc6f46da3c99edd4a5f4999731e54a440a2785f830c5bda5", class: "between_run_ruleset", experimental: true, regenerationRequired: false }] },
+  { class: "converter_regeneration", active: { identity: { profileId: "aero.converter.prototype-reach", profileVersion: "1.0.0", contentHash: "e37f8b527ed5ce86738ce22007fc963f83bccd737893fb4728d3b83eaa044eea", class: "converter_regeneration", experimental: true, regenerationRequired: true }, appliedContentHash: "a43b53a39c13c9e9efe59854aee0fa16efdcd3c6a29bc09f678d94b3fd8f0202", regenerationRequired: true }, selectedContentHash: "e37f8b527ed5ce86738ce22007fc963f83bccd737893fb4728d3b83eaa044eea", appliedContentHash: "a43b53a39c13c9e9efe59854aee0fa16efdcd3c6a29bc09f678d94b3fd8f0202", pendingContentHash: "e37f8b527ed5ce86738ce22007fc963f83bccd737893fb4728d3b83eaa044eea", regenerationRequired: true, profiles: [{ profileId: "aero.converter.canonical", profileVersion: "1.0.0", contentHash: "a43b53a39c13c9e9efe59854aee0fa16efdcd3c6a29bc09f678d94b3fd8f0202", class: "converter_regeneration", experimental: true, regenerationRequired: false }, { profileId: "aero.converter.prototype-reach", profileVersion: "1.0.0", contentHash: "e37f8b527ed5ce86738ce22007fc963f83bccd737893fb4728d3b83eaa044eea", class: "converter_regeneration", experimental: true, regenerationRequired: true }] }
 ] });
 app.append(selector);
 
@@ -129,6 +130,10 @@ progress.shadowRoot?.querySelector("button[data-intent='content-import-cancel']"
 library.shadowRoot?.querySelector("button[data-intent='library-delete-request']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 library.shadowRoot?.querySelector("button[data-intent='library-delete']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 selector.shadowRoot?.querySelector("button[data-value='spatial-cut']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+selector.shadowRoot?.querySelector("button[data-value='aero.visual.compact']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+selector.shadowRoot?.querySelector("button[data-intent='tuning-import-request']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+selector.shadowRoot?.querySelector("button[data-intent='tuning-export']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+selector.shadowRoot?.querySelector("button[data-intent='tuning-reset']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 playfield.style.setProperty("--aero-role-receptor", "#123456");
 
 fullscreen.shadowRoot?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -151,6 +156,11 @@ window.__aeroProductUiValidation = Object.freeze({
   profileCount: selector.shadowRoot?.querySelectorAll("[role='radio']").length ?? -1,
   checkedProfile: selector.shadowRoot?.querySelector("[aria-checked='true']")?.textContent ?? "",
   regenerationText: selector.shadowRoot?.querySelector("[part='telemetry']")?.textContent ?? "",
+  managedProfileClasses: selector.shadowRoot?.querySelectorAll("article[data-profile-class]").length ?? -1,
+  deterministicProfileState: `${selector.getProfilePresenterState().profileClasses.map((state) => state.class).join(",")}|${Object.isFrozen(selector.getProfilePresenterState())}`,
+  scoringDisabled: selector.shadowRoot?.querySelector("article[data-profile-class='between_run_ruleset'] button")?.hasAttribute("disabled") ?? false,
+  scoringStatus: selector.shadowRoot?.querySelector("article[data-profile-class='between_run_ruleset'] [role='status']")?.textContent ?? "",
+  converterStatus: selector.shadowRoot?.querySelector("article[data-profile-class='converter_regeneration']")?.textContent ?? "",
   renderSurface: Boolean(playfield.getRenderSurface()),
   cellCount: playfield.shadowRoot?.querySelectorAll("[data-cell]").length ?? -1,
   pauseRole: pause.shadowRoot?.querySelector("[role='alertdialog']")?.getAttribute("role") ?? "",

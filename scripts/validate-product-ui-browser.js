@@ -36,6 +36,10 @@ try {
   assert(result.profileCount === 5, "Flow plus four Boxing profile choices were not rendered.");
   assert(result.checkedProfile.includes("Spatial Grid") && result.checkedProfile.includes("Cut Family"), "Touch/click prototype selection did not expose checked state.");
   assert(result.regenerationText.includes("Regeneration required"), "Converter tuning did not expose regeneration-required telemetry.");
+  assert(result.managedProfileClasses === 3, "Visual, scoring, and converter profile classes were not all rendered.");
+  assert(result.deterministicProfileState === "live_visual,between_run_ruleset,converter_regeneration|true", "Host-readable profile state was not immutable and canonical.");
+  assert(result.scoringDisabled === true && result.scoringStatus.includes("Pause or finish"), "Playing-state scoring selection was not disabled with a reason.");
+  assert(result.converterStatus.includes("e37f8b527ed5ce86738ce22007fc963f83bccd737893fb4728d3b83eaa044eea") && result.converterStatus.includes("a43b53a39c13c9e9efe59854aee0fa16efdcd3c6a29bc09f678d94b3fd8f0202"), "Converter selected/applied/pending truth was incomplete.");
   assert(result.renderSurface === true && result.cellCount === 12, "Grid host did not expose its public surface and 4x3 receptors.");
   assert(result.pauseRole === "alertdialog", "Tracking pause was not exposed as an accessible modal alert.");
   assert(result.countdownText.includes("Workout time frozen"), "Countdown did not announce frozen workout time.");
@@ -55,6 +59,10 @@ try {
   assert(result.intents.find((intent) => intent.type === "library-delete")?.payload.packageId === "package-1", "Library deletion lost its package ID.");
   const profile = result.intents.find((intent) => intent.type === "prototype-select");
   assert(profile?.payload.profileId === "spatial-cut", "Profile selection intent lost the stable profile ID.");
+  const visualProfile = result.intents.find((intent) => intent.type === "prototype-profile-select");
+  assert(visualProfile?.payload.profileClass === "live_visual" && visualProfile.payload.profileId === "aero.visual.compact" && visualProfile.payload.profileVersion === "1.0.0" && visualProfile.payload.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Visual profile intent omitted bounded scalar identity fields.");
+  for (const type of ["tuning-import-request", "tuning-export", "tuning-reset"]) assert(Object.keys(result.intents.find((intent) => intent.type === type)?.payload ?? {}).length === 0, `${type} leaked bundle data.`);
+  for (const intent of result.intents) for (const value of Object.values(intent.payload)) assert(value === null || ["string", "number", "boolean"].includes(typeof value), `${intent.type} emitted a non-scalar payload value.`);
   const metrics = await page.evaluate(() => ({
     bodyWidth: document.body.scrollWidth,
     viewportWidth: document.documentElement.clientWidth,
@@ -69,6 +77,16 @@ try {
   assert(metrics.bodyWidth <= metrics.viewportWidth, "Product presenters overflowed the 390px viewport.");
   assert(metrics.unnamedControls === 0, "A product presenter exposed an unnamed interactive control.");
   assert(metrics.parts === true, "Stable direct-embed ::part surfaces were not present.");
+  const scoringEnablement = await page.evaluate(() => {
+    const selector = document.querySelector("aero-prototype-selector");
+    if (!selector || typeof selector.setSnapshot !== "function") return false;
+    selector.setSnapshot({ ...selector.presenterSnapshot, selectedProfileId: "spatial-cut", sessionState: "paused_manual" });
+    const enabled = !selector.shadowRoot?.querySelector("article[data-profile-class='between_run_ruleset'] button")?.hasAttribute("disabled");
+    selector.setSnapshot({ ...selector.presenterSnapshot, sessionState: "countdown" });
+    const countdownLocked = selector.shadowRoot?.querySelector("article[data-profile-class='between_run_ruleset'] button")?.hasAttribute("disabled") === true;
+    return enabled && countdownLocked;
+  });
+  assert(scoringEnablement === true, "Scoring selection did not enable while paused and lock during countdown.");
 
   const adversarial = await page.evaluate(async () => {
     const captured = [];
@@ -129,6 +147,23 @@ try {
     Object.defineProperty(malicious, "provider", { enumerable: true, get() { getterCalls += 1; return new Blob(["raw"]); } });
     isolatedBrowser.setSnapshot(malicious);
     const injectedElements = isolatedBrowser.shadowRoot?.querySelectorAll("img,script").length ?? -1;
+    const hostileSelector = document.createElement("aero-prototype-selector");
+    const hostileIdentity = { profileId: "hostile", profileVersion: "1", class: "live_visual", experimental: true, regenerationRequired: false };
+    Object.defineProperty(hostileIdentity, "contentHash", { enumerable: true, get() { getterCalls += 1; return "f".repeat(64); } });
+    hostileSelector.setSnapshot({ sessionState: "idle", profileClasses: [{ class: "live_visual", active: hostileIdentity }] });
+    document.body.append(hostileSelector);
+    const hostileIdentityRejected = !hostileSelector.shadowRoot?.textContent?.includes("hostile");
+    hostileSelector.setSnapshot({ sessionState: "idle", profileClasses: [{ class: "live_visual", active: { profileId: "x".repeat(257), profileVersion: "1", contentHash: "F".repeat(64), class: "live_visual", experimental: true, regenerationRequired: false } }] });
+    const hostileBoundsRejected = !hostileSelector.shadowRoot?.textContent?.includes("x".repeat(32));
+    const lifecycleSelector = document.createElement("aero-prototype-selector");
+    document.body.append(lifecycleSelector);
+    const detachedReset = lifecycleSelector.shadowRoot?.querySelector("button[data-intent='tuning-reset']");
+    lifecycleSelector.remove();
+    const beforeDetachedClick = captured.filter((intent) => intent.type === "tuning-reset").length;
+    detachedReset?.click();
+    document.body.append(lifecycleSelector);
+    lifecycleSelector.shadowRoot?.querySelector("button[data-intent='tuning-reset']")?.click();
+    const lifecycleResetCount = captured.filter((intent) => intent.type === "tuning-reset").length - beforeDetachedClick;
 
     const storage = document.createElement("aero-content-library");
     document.body.append(storage);
@@ -157,6 +192,8 @@ try {
     pause.remove();
     calibrationScreen.remove();
     isolatedBrowser.remove();
+    hostileSelector.remove();
+    lifecycleSelector.remove();
     storage.remove();
     firstFullscreen.remove();
     secondFullscreen.remove();
@@ -174,6 +211,9 @@ try {
       mutationText,
       getterCalls,
       injectedElements,
+      hostileIdentityRejected,
+      hostileBoundsRejected,
+      lifecycleResetCount,
       nanStorage,
       hugeStorage,
       instanceIntents,
@@ -187,7 +227,8 @@ try {
   assert(adversarial.pauseFocused === "calibration-reset" && adversarial.focusRestored, "Tracking alert dialog did not move and restore focus.");
   assert(adversarial.stablePreview && adversarial.stableSurface, "Calibration snapshot replacement destroyed media or renderer attachment surfaces.");
   assert(adversarial.mutationText.includes("Before mutation") && !adversarial.mutationText.includes("After mutation"), "External snapshot mutation changed presenter state after reconnect.");
-  assert(adversarial.getterCalls === 0 && adversarial.injectedElements === 0, "Snapshot narrowing executed an accessor or allowed markup injection.");
+  assert(adversarial.getterCalls === 0 && adversarial.injectedElements === 0 && adversarial.hostileIdentityRejected && adversarial.hostileBoundsRejected, "Snapshot/profile narrowing executed an accessor or allowed hostile identity/markup injection.");
+  assert(adversarial.lifecycleResetCount === 1, "Profile selector disconnect/reconnect duplicated listeners or emitted while detached.");
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
   assert(adversarial.idempotentDefinition && adversarial.scalarPayloadsOnly, "Definition or scalar-only event contracts failed.");
@@ -236,7 +277,22 @@ try {
     const evidencePage = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, reducedMotion: "reduce" });
     await evidencePage.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
     await evidencePage.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
-    await evidencePage.screenshot({ path: `screenshots/task9-ui-${viewport.name}.png`, fullPage: false });
+    const evidenceBounds = await evidencePage.evaluate(() => {
+      const app = document.querySelector("#app");
+      const selector = document.querySelector("aero-prototype-selector");
+      if (!(app instanceof HTMLElement) || !(selector instanceof HTMLElement)) return null;
+      for (const child of [...app.children]) if (child !== selector) child.remove();
+      selector.setSnapshot({ ...selector.presenterSnapshot, selectedProfileId: "spatial-cut", sessionState: "paused_manual" });
+      window.scrollTo(0, 0);
+      const bounds = selector.getBoundingClientRect();
+      const controls = [...(selector.shadowRoot?.querySelectorAll("button") ?? [])].map((control) => control.getBoundingClientRect());
+      return { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom, pageWidth: document.documentElement.scrollWidth, pageHeight: document.documentElement.scrollHeight, viewportWidth: document.documentElement.clientWidth, controlsInside: controls.every((control) => control.left >= bounds.left && control.right <= bounds.right && control.top >= bounds.top && control.bottom <= bounds.bottom) };
+    });
+    assert(Boolean(evidenceBounds) && evidenceBounds.left >= 0 && evidenceBounds.top >= 0 && evidenceBounds.right <= evidenceBounds.viewportWidth && evidenceBounds.pageWidth <= evidenceBounds.viewportWidth && evidenceBounds.controlsInside, `${viewport.name} profile evidence clipped or overflowed its capture width: ${JSON.stringify(evidenceBounds)}.`);
+    const screenshot = await evidencePage.screenshot({ path: `screenshots/task11-ui-profiles-${viewport.name}.png`, fullPage: true });
+    const capturedWidth = screenshot.readUInt32BE(16);
+    const capturedHeight = screenshot.readUInt32BE(20);
+    assert(evidenceBounds.right <= capturedWidth && evidenceBounds.bottom <= capturedHeight && evidenceBounds.pageHeight <= capturedHeight, `${viewport.name} profile surface was outside the captured image.`);
     await evidencePage.close();
   }
 } finally {
