@@ -148,13 +148,53 @@ try {
     isolatedBrowser.setSnapshot(malicious);
     const injectedElements = isolatedBrowser.shadowRoot?.querySelectorAll("img,script").length ?? -1;
     const hostileSelector = document.createElement("aero-prototype-selector");
-    const hostileIdentity = { profileId: "hostile", profileVersion: "1", class: "live_visual", experimental: true, regenerationRequired: false };
-    Object.defineProperty(hostileIdentity, "contentHash", { enumerable: true, get() { getterCalls += 1; return "f".repeat(64); } });
-    hostileSelector.setSnapshot({ sessionState: "idle", profileClasses: [{ class: "live_visual", active: hostileIdentity }] });
+    hostileSelector.setSnapshot(selector.presenterSnapshot);
     document.body.append(hostileSelector);
-    const hostileIdentityRejected = !hostileSelector.shadowRoot?.textContent?.includes("hostile");
-    hostileSelector.setSnapshot({ sessionState: "idle", profileClasses: [{ class: "live_visual", active: { profileId: "x".repeat(257), profileVersion: "1", contentHash: "F".repeat(64), class: "live_visual", experimental: true, regenerationRequired: false } }] });
-    const hostileBoundsRejected = !hostileSelector.shadowRoot?.textContent?.includes("x".repeat(32));
+    const canonicalDirectAccepted = hostileSelector.getProfilePresenterState().profileClasses.length === 3 && hostileSelector.shadowRoot?.textContent?.includes("aero.visual.default");
+    const priorProfileState = JSON.stringify(hostileSelector.getProfilePresenterState());
+    const attackResults = [];
+    const attack = (candidate) => { hostileSelector.setSnapshot(candidate); attackResults.push(JSON.stringify(hostileSelector.getProfilePresenterState()) === priorProfileState); };
+    let candidate = structuredClone(selector.presenterSnapshot);
+    delete candidate.profileClasses[0].active.schema;
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active.extra = true;
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    Object.defineProperty(candidate.profileClasses[0].active, "hidden", { value: true });
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active[Symbol("extra")] = true;
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    Object.defineProperty(candidate.profileClasses[0].active, "contentHash", { enumerable: true, get() { getterCalls += 1; return "f".repeat(64); } });
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    Object.defineProperty(candidate.profileClasses[0], "active", { enumerable: true, get() { getterCalls += 1; return {}; } });
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active = new (class Identity {})();
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active = new Uint8Array(7);
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active.profileId = "x".repeat(257);
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active.contentHash = "F".repeat(64);
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[0].active.regenerationRequired = true;
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[1].active.regenerationRequired = true;
+    attack(candidate);
+    candidate = structuredClone(selector.presenterSnapshot);
+    candidate.profileClasses[2].regenerationRequired = false;
+    attack(candidate);
+    const hostileIdentityRejected = attackResults.every(Boolean) && attackResults.length === 13;
+    const hostileBoundsRejected = hostileIdentityRejected;
     const lifecycleSelector = document.createElement("aero-prototype-selector");
     document.body.append(lifecycleSelector);
     const detachedReset = lifecycleSelector.shadowRoot?.querySelector("button[data-intent='tuning-reset']");
@@ -211,6 +251,7 @@ try {
       mutationText,
       getterCalls,
       injectedElements,
+      canonicalDirectAccepted,
       hostileIdentityRejected,
       hostileBoundsRejected,
       lifecycleResetCount,
@@ -227,7 +268,7 @@ try {
   assert(adversarial.pauseFocused === "calibration-reset" && adversarial.focusRestored, "Tracking alert dialog did not move and restore focus.");
   assert(adversarial.stablePreview && adversarial.stableSurface, "Calibration snapshot replacement destroyed media or renderer attachment surfaces.");
   assert(adversarial.mutationText.includes("Before mutation") && !adversarial.mutationText.includes("After mutation"), "External snapshot mutation changed presenter state after reconnect.");
-  assert(adversarial.getterCalls === 0 && adversarial.injectedElements === 0 && adversarial.hostileIdentityRejected && adversarial.hostileBoundsRejected, "Snapshot/profile narrowing executed an accessor or allowed hostile identity/markup injection.");
+  assert(adversarial.canonicalDirectAccepted && adversarial.getterCalls === 0 && adversarial.injectedElements === 0 && adversarial.hostileIdentityRejected && adversarial.hostileBoundsRejected, "Canonical identity acceptance or atomic zero-getter hostile rejection failed.");
   assert(adversarial.lifecycleResetCount === 1, "Profile selector disconnect/reconnect duplicated listeners or emitted while detached.");
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");

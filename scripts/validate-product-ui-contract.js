@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isPrototypeTuningIdentity } from "@aerobeat/web-contracts";
 
 const presenters = readFileSync("src/elements/aero-product-presenters.js", "utf8");
 const screen = readFileSync("src/screens/aero-calibration-screen/aero-calibration-screen.js", "utf8");
@@ -44,4 +45,24 @@ for (const profileClass of ["live_visual", "between_run_ruleset", "converter_reg
 for (const field of ["selectedContentHash", "appliedContentHash", "pendingContentHash", "experimental", "regenerationRequired"]) assert.ok(presenters.includes(field), `Missing bounded profile state field ${field}.`);
 for (const forbiddenProfileFeature of ["survey", "winner", "preference", "leaderboard"]) assert.equal(presenters.toLowerCase().includes(forbiddenProfileFeature), false, `Profile presenter contains forbidden promotion feature ${forbiddenProfileFeature}.`);
 assert.ok(index.includes("defineAeroProductPresenters"), "Root package does not register product presenters.");
+const canonicalIdentity = Object.freeze({ schema: "aerobeat/prototype_tuning_identity", version: 1, profileId: "aero.visual.default", profileVersion: "1.0.0", contentHash: "f".repeat(64), class: "live_visual", regenerationRequired: false });
+assert.equal(isPrototypeTuningIdentity(canonicalIdentity), true, "Canonical exact seven-field identity was rejected.");
+for (const mutate of [
+  (identity) => { delete identity.schema; },
+  (identity) => { identity.extra = true; },
+  (identity) => { Object.defineProperty(identity, "hidden", { value: true }); },
+  (identity) => { identity[Symbol("extra")] = true; },
+  (identity) => { identity.profileId = "x".repeat(257); },
+  (identity) => { identity.contentHash = "F".repeat(64); },
+  (identity) => { identity.regenerationRequired = true; }
+]) {
+  const candidate = { ...canonicalIdentity };
+  mutate(candidate);
+  assert.equal(isPrototypeTuningIdentity(candidate), false, "Malformed public tuning identity was accepted.");
+}
+let getterCalls = 0;
+const accessorIdentity = { ...canonicalIdentity };
+Object.defineProperty(accessorIdentity, "contentHash", { enumerable: true, get() { getterCalls += 1; return "f".repeat(64); } });
+assert.equal(isPrototypeTuningIdentity(accessorIdentity), false);
+assert.equal(getterCalls, 0, "Public identity validation executed an accessor.");
 console.log("Product UI public contract validation passed.");

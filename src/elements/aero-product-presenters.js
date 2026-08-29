@@ -1,6 +1,6 @@
 // @ts-check
 
-import { conversionRecipeIds, elementNames, rulesetIds } from "@aerobeat/web-contracts";
+import { conversionRecipeIds, elementNames, hasExactKeys, isPrototypeTuningIdentity, rulesetIds } from "@aerobeat/web-contracts";
 
 /** Public composed UI-intent event name. @type {"aero:ui:intent"} */
 export const aeroUiIntentEventName = "aero:ui:intent";
@@ -438,6 +438,12 @@ const scoringChangeStates = Object.freeze(["idle", "calibrating", "paused_manual
 
 /** Flow/four-Boxing prototype and three-class experimental profile presenter. */
 export class AeroPrototypeSelector extends AeroPresenterElement {
+  /** Atomically accept an exact public profile snapshot; malformed input preserves prior state. @param {AeroPresenterSnapshot} snapshot */
+  setSnapshot(snapshot) {
+    if (!isPlainRecord(snapshot) || (Object.hasOwn(snapshot, "profileClasses") && !isValidProfilePresenterSnapshot(snapshot))) return;
+    super.setSnapshot(snapshot);
+  }
+
   /** Deterministic, immutable host-readable profile state; never a bundle. @returns {Readonly<{selectedProfileId:string,sessionState:string,profileClasses:readonly ProfileClassState[]}>} */
   getProfilePresenterState() {
     const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
@@ -622,43 +628,56 @@ function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used
 function formatBytes(bytes) { if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`; }
 /** @param {string} state @returns {string} */
 function calibrationMessage(state) { const messages = /** @type {Readonly<Record<string, string>>} */ ({ waiting: "Step back until your upper body is visible.", holding: "Hold a steady T-pose for four seconds.", cooldown: "Calibration captured. Relax your arms.", calibrated: "Calibration ready.", tracking_lost: "Tracking lost. A fresh calibration is required.", error: "Calibration could not complete." }); return messages[state] ?? "Calibration required."; }
-/** @typedef {Readonly<{profileId:string,profileVersion:string,contentHash:string,class:string,experimental:boolean,regenerationRequired:boolean}>} ProfileIdentity */
-/** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
+/** @typedef {Readonly<{schema:"aerobeat/prototype_tuning_identity",version:1,profileId:string,profileVersion:string,contentHash:string,class:string,regenerationRequired:boolean}>} ProfileIdentity */
+/** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],experimental:boolean,selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
 
+/** Validate one complete selector snapshot without invoking accessors. @param {unknown} value @returns {boolean} */
+function isValidProfilePresenterSnapshot(value) {
+  if (!hasExactKeys(value, ["selectedProfileId", "sessionState", "profileClasses"])) return false;
+  if (typeof value.selectedProfileId !== "string" || !prototypeOptions.some((option) => option.id === value.selectedProfileId) || typeof value.sessionState !== "string" || value.sessionState.length > 64 || !isExactDataArray(value.profileClasses, 3)) return false;
+  const seen = new Set();
+  for (const state of value.profileClasses) {
+    const classDescriptor = typeof state === "object" && state !== null ? Object.getOwnPropertyDescriptor(state, "class") : undefined;
+    if (!classDescriptor?.enumerable || !("value" in classDescriptor) || typeof classDescriptor.value !== "string" || !profileClasses.includes(classDescriptor.value) || seen.has(classDescriptor.value)) return false;
+    const isConverter = classDescriptor.value === "converter_regeneration";
+    const fields = isConverter ? ["class", "active", "profiles", "experimental", "selectedContentHash", "appliedContentHash", "pendingContentHash", "regenerationRequired"] : ["class", "active", "profiles", "experimental"];
+    if (!hasExactKeys(state, fields) || !isPrototypeTuningIdentity(state.active) || state.active.class !== state.class || typeof state.experimental !== "boolean" || !isExactDataArray(state.profiles, 64) || !state.profiles.every((identity) => isPrototypeTuningIdentity(identity) && identity.class === state.class)) return false;
+    if (isConverter) {
+      const selected = state.selectedContentHash;
+      const applied = state.appliedContentHash;
+      const pending = state.pendingContentHash;
+      if (!isBareHash(selected) || !isBareHash(applied) || (pending !== null && !isBareHash(pending)) || typeof state.regenerationRequired !== "boolean" || state.active.contentHash !== selected || state.active.regenerationRequired !== state.regenerationRequired) return false;
+      if (state.regenerationRequired ? pending !== selected || selected === applied : pending !== null || selected !== applied) return false;
+    }
+    seen.add(state.class);
+  }
+  return seen.size === 3;
+}
+/** @param {unknown} value @param {number} maximumLength @returns {value is readonly unknown[]} */
+function isExactDataArray(value, maximumLength) {
+  if (!Array.isArray(value) || value.length > maximumLength) return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== value.length + 1 || keys.at(-1) !== "length") return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor?.enumerable || !("value" in descriptor)) return false;
+  }
+  return true;
+}
+/** @param {unknown} value @returns {value is string} */
+function isBareHash(value) { return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value); }
 /** @param {Readonly<Record<string, unknown>>} snapshot @returns {readonly ProfileClassState[]} */
 function normalizeProfileClassStates(snapshot) {
   const result = [];
-  const seen = new Set();
-  for (const source of readRecordList(snapshot, "profileClasses").slice(0, 3)) {
-    const profileClass = readString(source, "class", "");
-    if (!profileClasses.includes(profileClass) || seen.has(profileClass)) continue;
-    const activeContainer = readRecord(source, "active") ?? source;
-    const activeSource = readRecord(activeContainer, "identity") ?? readRecord(activeContainer, "profile") ?? activeContainer;
-    const active = normalizeProfileIdentity(activeSource);
-    if (!active || active.class !== profileClass) continue;
-    const profiles = readRecordList(source, "profiles").slice(0, 64).map((entry) => normalizeProfileIdentity(readRecord(entry, "identity") ?? entry)).filter((entry) => entry?.class === profileClass);
-    profiles.sort((left, right) => `${left?.profileId}\u0000${left?.profileVersion}\u0000${left?.contentHash}`.localeCompare(`${right?.profileId}\u0000${right?.profileVersion}\u0000${right?.contentHash}`));
-    const isConverter = profileClass === "converter_regeneration";
-    const selectedContentHash = isConverter ? boundedHash(readString(source, "selectedContentHash", ""), "") : active.contentHash;
-    const appliedContentHash = isConverter ? boundedHash(readString(source, "appliedContentHash", ""), "") : active.contentHash;
-    const pendingValue = source.pendingContentHash === null ? null : boundedHash(readString(source, "pendingContentHash", ""), "");
-    const regenerationRequired = isConverter && readBoolean(source, "regenerationRequired", readBoolean(activeContainer, "regenerationRequired", active.regenerationRequired));
-    if (isConverter && (!selectedContentHash || !appliedContentHash || !Object.hasOwn(source, "pendingContentHash") || (source.pendingContentHash !== null && !pendingValue))) continue;
-    result.push(Object.freeze({ class: profileClass, active, profiles: Object.freeze(profiles.filter(Boolean)), selectedContentHash, appliedContentHash, pendingContentHash: pendingValue || null, regenerationRequired }));
-    seen.add(profileClass);
+  for (const source of readRecordList(snapshot, "profileClasses")) {
+    const active = /** @type {ProfileIdentity} */ (readRecord(source, "active"));
+    const profiles = /** @type {ProfileIdentity[]} */ (readRecordList(source, "profiles"));
+    profiles.sort((left, right) => `${left.profileId}\u0000${left.profileVersion}\u0000${left.contentHash}`.localeCompare(`${right.profileId}\u0000${right.profileVersion}\u0000${right.contentHash}`));
+    const isConverter = active.class === "converter_regeneration";
+    result.push(Object.freeze({ class: active.class, active, profiles: Object.freeze(profiles), experimental: readBoolean(source, "experimental", false), selectedContentHash: isConverter ? readString(source, "selectedContentHash", "") : active.contentHash, appliedContentHash: isConverter ? readString(source, "appliedContentHash", "") : active.contentHash, pendingContentHash: isConverter ? (source.pendingContentHash === null ? null : readString(source, "pendingContentHash", "")) : null, regenerationRequired: isConverter && readBoolean(source, "regenerationRequired", false) }));
   }
   result.sort((left, right) => profileClasses.indexOf(left.class) - profileClasses.indexOf(right.class));
   return Object.freeze(result);
-}
-/** @param {Readonly<Record<string, unknown>>} source @returns {ProfileIdentity | null} */
-function normalizeProfileIdentity(source) {
-  const profileId = boundedIdentityString(readString(source, "profileId", ""));
-  const profileVersion = boundedIdentityString(readString(source, "profileVersion", ""));
-  const contentHash = boundedHash(readString(source, "contentHash", ""), "");
-  const identityClass = readString(source, "class", "");
-  const experimental = readBoolean(source, "experimental", false);
-  if (!profileId || !profileVersion || !contentHash || !profileClasses.includes(identityClass) || !experimental) return null;
-  return Object.freeze({ profileId, profileVersion, contentHash, class: identityClass, experimental, regenerationRequired: readBoolean(source, "regenerationRequired", false) });
 }
 /** @param {ProfileClassState} state @param {boolean} scoringDisabled @param {string} scoringReason @returns {string} */
 function profileClassMarkup(state, scoringDisabled, scoringReason) {
@@ -668,13 +687,9 @@ function profileClassMarkup(state, scoringDisabled, scoringReason) {
   const policy = state.class === "live_visual" ? "Applies immediately." : isScoring ? scoringReason : state.regenerationRequired ? "Regenerate content to apply this converter profile." : "Selected converter profile matches generated content.";
   const options = state.profiles.length ? `<div class="row" aria-label="${escapeAttribute(titleCase(state.class))} profile choices">${state.profiles.map((profile) => `<button type="button" data-intent="prototype-profile-select" data-profile-class="${escapeAttribute(profile.class)}" data-value="${escapeAttribute(profile.profileId)}" data-profile-version="${escapeAttribute(profile.profileVersion)}" data-content-hash="${escapeAttribute(profile.contentHash)}" ${disabled ? "disabled" : ""} aria-label="Select ${escapeAttribute(profile.profileId)} ${escapeAttribute(titleCase(profile.class))} profile">${escapeHtml(profile.profileId)}</button>`).join("")}</div>` : "";
   const converterTruth = isConverter ? `<p class="muted">Selected ${escapeHtml(state.selectedContentHash)}<br>Applied ${escapeHtml(state.appliedContentHash)}<br>Pending ${escapeHtml(state.pendingContentHash ?? "none")}</p>` : "";
-  return `<article class="card" data-profile-class="${escapeAttribute(state.class)}"><div class="row"><h3>${escapeHtml(titleCase(state.class))}</h3><span class="pill">Experimental</span>${state.regenerationRequired ? `<span class="pill error">Regeneration required</span>` : `<span class="pill">Applied</span>`}</div>${identityMarkup(state.active)}<p class="muted live" role="status" aria-live="polite">${escapeHtml(policy)}</p>${converterTruth}${options}</article>`;
+  return `<article class="card" data-profile-class="${escapeAttribute(state.class)}"><div class="row"><h3>${escapeHtml(titleCase(state.class))}</h3>${state.experimental ? `<span class="pill">Experimental</span>` : ""}${state.regenerationRequired ? `<span class="pill error">Regeneration required</span>` : `<span class="pill">Applied</span>`}</div>${identityMarkup(state.active)}<p class="muted live" role="status" aria-live="polite">${escapeHtml(policy)}</p>${converterTruth}${options}</article>`;
 }
 /** @param {ProfileIdentity} identity @returns {string} */
-function identityMarkup(identity) { return `<div part="profile-identity"><strong>${escapeHtml(identity.profileId)}</strong><p class="muted">Version ${escapeHtml(identity.profileVersion)} · ${escapeHtml(identity.class)} · ${identity.experimental ? "experimental" : "invalid"}<br>Hash ${escapeHtml(identity.contentHash)}</p></div>`; }
-/** @param {string} value @returns {string} */
-function boundedIdentityString(value) { return value.length > 0 && value.length <= 256 ? value : ""; }
-/** @param {string} value @param {string} fallback @returns {string} */
-function boundedHash(value, fallback) { return /^[0-9a-f]{64}$/u.test(value) ? value : fallback; }
+function identityMarkup(identity) { return `<div part="profile-identity"><strong>${escapeHtml(identity.profileId)}</strong><p class="muted">Version ${escapeHtml(identity.profileVersion)} · ${escapeHtml(identity.class)}<br>Hash ${escapeHtml(identity.contentHash)}</p></div>`; }
 /** @param {string} url @returns {boolean} */
 function isSafeVisualUrl(url) { if (url === "") return false; try { const parsed = new URL(url, document.baseURI); return parsed.protocol === "https:" || parsed.protocol === "blob:" || (parsed.protocol === "http:" && parsed.hostname === "127.0.0.1"); } catch { return false; } }
