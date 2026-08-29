@@ -283,16 +283,18 @@ try {
       if (!(app instanceof HTMLElement) || !(selector instanceof HTMLElement)) return null;
       for (const child of [...app.children]) if (child !== selector) child.remove();
       selector.setSnapshot({ ...selector.presenterSnapshot, selectedProfileId: "spatial-cut", sessionState: "paused_manual" });
-      window.scrollTo(0, 0);
       const bounds = selector.getBoundingClientRect();
       const controls = [...(selector.shadowRoot?.querySelectorAll("button") ?? [])].map((control) => control.getBoundingClientRect());
-      return { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom, pageWidth: document.documentElement.scrollWidth, pageHeight: document.documentElement.scrollHeight, viewportWidth: document.documentElement.clientWidth, controlsInside: controls.every((control) => control.left >= bounds.left && control.right <= bounds.right && control.top >= bounds.top && control.bottom <= bounds.bottom) };
+      const panel = selector.shadowRoot?.querySelector("[part='panel']");
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      return { pageLeft: bounds.left + scrollX, pageTop: bounds.top + scrollY, pageRight: bounds.right + scrollX, pageBottom: bounds.bottom + scrollY, pageWidth: document.documentElement.scrollWidth, pageHeight: document.documentElement.scrollHeight, viewportWidth: document.documentElement.clientWidth, controlsInside: controls.every((control) => control.left >= bounds.left && control.right <= bounds.right && control.top >= bounds.top && control.bottom <= bounds.bottom), overflowVisible: getComputedStyle(selector).overflowY !== "hidden" && (!(panel instanceof HTMLElement) || getComputedStyle(panel).overflowY !== "hidden") };
     });
-    assert(Boolean(evidenceBounds) && evidenceBounds.left >= 0 && evidenceBounds.top >= 0 && evidenceBounds.right <= evidenceBounds.viewportWidth && evidenceBounds.pageWidth <= evidenceBounds.viewportWidth && evidenceBounds.controlsInside, `${viewport.name} profile evidence clipped or overflowed its capture width: ${JSON.stringify(evidenceBounds)}.`);
+    assert(Boolean(evidenceBounds) && evidenceBounds.pageLeft >= 0 && evidenceBounds.pageTop >= 0 && evidenceBounds.pageRight <= evidenceBounds.pageWidth && evidenceBounds.pageWidth <= evidenceBounds.viewportWidth && evidenceBounds.controlsInside && evidenceBounds.overflowVisible, `${viewport.name} profile evidence clipped or overflowed its full-page capture: ${JSON.stringify(evidenceBounds)}.`);
     const screenshot = await evidencePage.screenshot({ path: `screenshots/task11-ui-profiles-${viewport.name}.png`, fullPage: true });
     const capturedWidth = screenshot.readUInt32BE(16);
     const capturedHeight = screenshot.readUInt32BE(20);
-    assert(evidenceBounds.right <= capturedWidth && evidenceBounds.bottom <= capturedHeight && evidenceBounds.pageHeight <= capturedHeight, `${viewport.name} profile surface was outside the captured image.`);
+    assert(evidenceBounds.pageRight <= capturedWidth && evidenceBounds.pageBottom <= capturedHeight && evidenceBounds.pageHeight <= capturedHeight, `${viewport.name} profile surface was outside the captured image.`);
     await evidencePage.close();
   }
 } finally {
