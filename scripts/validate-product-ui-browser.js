@@ -221,6 +221,57 @@ try {
     secondFullscreen.shadowRoot?.querySelector("button")?.click();
     const instanceIntents = captured.slice(-2).map((intent) => intent.type);
 
+    const defaultSelector = document.createElement("aero-prototype-selector");
+    const defaultSelectorTwin = document.createElement("aero-prototype-selector");
+    defaultSelector.setSnapshot(selector.presenterSnapshot);
+    defaultSelectorTwin.setSnapshot(selector.presenterSnapshot);
+    document.body.append(defaultSelector, defaultSelectorTwin);
+    const defaultFullMarkupUnchanged = defaultSelector.shadowRoot?.innerHTML === defaultSelectorTwin.shadowRoot?.innerHTML && defaultSelector.scope === "full" && defaultSelector.shadowRoot?.querySelectorAll("input[type='radio']").length === 0 && defaultSelector.shadowRoot?.querySelectorAll("button[role='radio']").length === 5 && defaultSelector.getProfilePresenterState().profileClasses.length === 3;
+    const gameplaySelector = document.createElement("aero-prototype-selector");
+    gameplaySelector.scope = "gameplay";
+    gameplaySelector.setSnapshot({ selectedProfileId: "spatial-row", sessionState: "playing" });
+    const visualsSelector = document.createElement("aero-prototype-selector");
+    visualsSelector.setAttribute("scope", "visuals");
+    visualsSelector.setSnapshot(selector.presenterSnapshot);
+    document.body.append(gameplaySelector, visualsSelector);
+    const gameplayLabels = [...(gameplaySelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
+    const visualLabels = [...(visualsSelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
+    const gameplayChecked = gameplaySelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
+    const visualChecked = visualsSelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
+    const gameplaySelected = gameplaySelector.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const visualSelected = visualsSelector.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const scopedText = `${gameplaySelector.shadowRoot?.querySelector("section")?.textContent ?? ""} ${visualsSelector.shadowRoot?.querySelector("section")?.textContent ?? ""}`;
+    const nativeRadioVisibility = [...(gameplaySelector.shadowRoot?.querySelectorAll("input[type='radio']") ?? []), ...(visualsSelector.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])].every((radio) => {
+      const style = getComputedStyle(radio);
+      const bounds = radio.getBoundingClientRect();
+      return style.display !== "none" && style.visibility === "visible" && Number(style.opacity) === 1 && style.appearance !== "none" && bounds.width >= 42 && bounds.height >= 42;
+    });
+    visualsSelector.shadowRoot?.querySelector("input[value='aero.visual.compact']")?.click();
+    const scopedVisualIntent = captured.findLast((intent) => intent?.type === "prototype-profile-select")?.payload;
+    const gameplayFallback = document.createElement("aero-prototype-selector");
+    gameplayFallback.scope = "gameplay";
+    gameplayFallback.setSnapshot({ selectedProfileId: "not-a-profile", sessionState: "idle" });
+    document.body.append(gameplayFallback);
+    const gameplayFallbackId = gameplayFallback.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const visualFallback = document.createElement("aero-prototype-selector");
+    visualFallback.scope = "visuals";
+    const leaderlessSnapshot = structuredClone(selector.presenterSnapshot);
+    leaderlessSnapshot.profileClasses[0].active = { ...leaderlessSnapshot.profileClasses[0].active, profileId: "aero.visual.missing", contentHash: "c".repeat(64) };
+    visualFallback.setSnapshot(leaderlessSnapshot);
+    document.body.append(visualFallback);
+    const visualFallbackId = visualFallback.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const scopedBeforeAttack = visualFallback.shadowRoot?.innerHTML ?? "";
+    leaderlessSnapshot.profileClasses[0].active.schema = "malicious/schema";
+    visualFallback.setSnapshot(leaderlessSnapshot);
+    const scopedAtomicRejection = visualFallback.shadowRoot?.innerHTML === scopedBeforeAttack;
+    const detachedScopedInput = gameplayFallback.shadowRoot?.querySelector("input[value='semantic-row']");
+    gameplayFallback.remove();
+    const beforeDetachedScoped = captured.filter((intent) => intent.type === "prototype-select").length;
+    detachedScopedInput?.click();
+    document.body.append(gameplayFallback);
+    gameplayFallback.shadowRoot?.querySelector("input[value='semantic-row']")?.click();
+    const scopedReconnectIntentCount = captured.filter((intent) => intent.type === "prototype-select").length - beforeDetachedScoped;
+
     const module = await import("/src/index.js");
     module.defineAeroUiElements();
     module.defineAeroUiElements();
@@ -272,6 +323,12 @@ try {
     storage.remove();
     firstFullscreen.remove();
     secondFullscreen.remove();
+    defaultSelector.remove();
+    defaultSelectorTwin.remove();
+    gameplaySelector.remove();
+    visualsSelector.remove();
+    gameplayFallback.remove();
+    visualFallback.remove();
     return {
       arrowProfileId,
       focusedRadioId,
@@ -293,6 +350,20 @@ try {
       nanStorage,
       hugeStorage,
       instanceIntents,
+      defaultFullMarkupUnchanged,
+      gameplayLabels,
+      visualLabels,
+      gameplayChecked,
+      visualChecked,
+      gameplaySelected,
+      visualSelected,
+      scopedText,
+      nativeRadioVisibility,
+      scopedVisualIntent,
+      gameplayFallbackId,
+      visualFallbackId,
+      scopedAtomicRejection,
+      scopedReconnectIntentCount,
       idempotentDefinition,
       scalarPayloadsOnly,
       compactAttributeRoundtrip,
@@ -307,6 +378,33 @@ try {
       compactToggleIntentFree
     };
   });
+  await page.evaluate(() => {
+    const scoped = document.createElement("aero-prototype-selector");
+    scoped.id = "scoped-keyboard-test";
+    scoped.setAttribute("scope", "gameplay");
+    scoped.setSnapshot({ selectedProfileId: "spatial-row", sessionState: "idle" });
+    const after = document.createElement("button");
+    after.id = "after-scoped-keyboard-test";
+    after.textContent = "After selector";
+    document.body.append(scoped, after);
+    scoped.shadowRoot?.querySelector("input:checked")?.focus();
+  });
+  await page.keyboard.press("ArrowRight");
+  const scopedArrow = await page.evaluate(() => {
+    const scoped = document.querySelector("#scoped-keyboard-test");
+    return { checked: scoped?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: scoped?.shadowRoot?.activeElement?.value ?? "" };
+  });
+  await page.keyboard.press("Tab");
+  const scopedTabExited = await page.evaluate(() => document.activeElement?.id === "after-scoped-keyboard-test");
+  await page.keyboard.press("Shift+Tab");
+  const scopedTabReturned = await page.evaluate(() => {
+    const scoped = document.querySelector("#scoped-keyboard-test");
+    const returned = scoped?.shadowRoot?.activeElement?.value ?? "";
+    scoped?.remove();
+    document.querySelector("#after-scoped-keyboard-test")?.remove();
+    return returned;
+  });
+  assert(scopedArrow.checked === "semantic-cut" && scopedArrow.focused === "semantic-cut" && scopedTabExited && scopedTabReturned === "semantic-cut", "Scoped native radio Arrow/Tab keyboard behavior failed.");
   assert(adversarial.arrowProfileId === "flow" && adversarial.focusedRadioId === "flow", "Arrow-key radio navigation did not wrap, select and focus the adjacent profile.");
   assert(adversarial.radioTabIndexes.filter((value) => value === 0).length === 1, "Prototype radio group did not expose one roving tab stop.");
   assert(adversarial.deleteBeforeConfirm === 0 && adversarial.confirmationVisible && adversarial.confirmedDelete === "confirm-package", "Library deletion did not require explicit confirmation.");
@@ -317,6 +415,14 @@ try {
   assert(adversarial.lifecycleResetCount === 1, "Profile selector disconnect/reconnect duplicated listeners or emitted while detached.");
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
+  assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the full development presenter field-for-field.");
+  assert(adversarial.gameplayLabels.join("|") === "Flow|Semantic Row|Spatial Row|Semantic Cut|Spatial Cut" && adversarial.visualLabels.join("|") === "Default|Compact", "Scoped selectors exposed incorrect product labels.");
+  assert(adversarial.gameplayChecked === 1 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "spatial-row" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not preserve exactly one valid active selection.");
+  assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
+  assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
+  assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
+  assert(adversarial.gameplayFallbackId === "flow" && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
+  assert(adversarial.scopedAtomicRejection && adversarial.scopedReconnectIntentCount === 1, `Scoped selector atomicity or reconnect listener exactness regressed: ${JSON.stringify({ atomic: adversarial.scopedAtomicRejection, reconnectIntents: adversarial.scopedReconnectIntentCount })}`);
   assert(adversarial.idempotentDefinition && adversarial.scalarPayloadsOnly, "Definition or scalar-only event contracts failed.");
   assert(adversarial.compactAttributeRoundtrip && adversarial.compactHeadingsSuppressed && adversarial.compactMetadataSuppressed, "Compact property/attribute did not visually suppress only designated headings and metadata.");
   assert(adversarial.compactControlsActionable, "Compact mode hid or undersized an actionable control.");
@@ -429,6 +535,43 @@ try {
     assert(Boolean(compactBounds) && compactBounds.compactHosts === 8 && compactBounds.scrollWidth <= compactBounds.viewportWidth && compactBounds.appRight <= compactBounds.viewportWidth && compactBounds.visibleHeadings === 0 && compactBounds.visibleMetadata === 0 && compactBounds.controlsValid && compactBounds.criticalErrorVisible && compactBounds.progressVisible, `${viewport.name} compact action drawer clipped, exposed metadata, or hid critical/action state: ${JSON.stringify(compactBounds)}.`);
     await compactPage.screenshot({ path: `screenshots/task12-ui-compact-${viewport.name}.png`, fullPage: true });
     await compactPage.close();
+  }
+  for (const viewport of [
+    { name: "phone-portrait", width: 390, height: 844 },
+    { name: "phone-landscape", width: 844, height: 390 }
+  ]) {
+    const scopedPage = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, reducedMotion: "reduce" });
+    await scopedPage.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
+    await scopedPage.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
+    const scopedEvidence = await scopedPage.evaluate(() => {
+      const app = document.querySelector("#app");
+      const source = document.querySelector("aero-prototype-selector");
+      if (!(app instanceof HTMLElement) || !source) return null;
+      const snapshot = source.presenterSnapshot;
+      app.replaceChildren();
+      const gameplay = document.createElement("aero-prototype-selector");
+      const visuals = document.createElement("aero-prototype-selector");
+      gameplay.setAttribute("scope", "gameplay");
+      visuals.setAttribute("scope", "visuals");
+      gameplay.setAttribute("compact", "");
+      visuals.setAttribute("compact", "");
+      gameplay.setSnapshot({ selectedProfileId: "flow", sessionState: "idle" });
+      visuals.setSnapshot(snapshot);
+      app.append(gameplay, visuals);
+      const sections = [gameplay, visuals];
+      const controls = sections.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
+      const visibleText = sections.map((host) => host.shadowRoot?.querySelector("section")?.textContent ?? "").join(" ");
+      return {
+        labels: sections.map((host) => [...(host.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "")),
+        checked: sections.map((host) => host.shadowRoot?.querySelectorAll("input:checked").length ?? 0),
+        forbiddenText: /(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(visibleText),
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        controlsVisible: controls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.appearance !== "none" && style.visibility === "visible"; })
+      };
+    });
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Semantic Row|Spatial Row|Semantic Cut|Spatial Cut" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} scoped product selector evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
+    await scopedPage.close();
   }
 } finally {
   await browser.close();

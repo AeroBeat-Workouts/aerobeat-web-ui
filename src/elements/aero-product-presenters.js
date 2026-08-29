@@ -442,18 +442,35 @@ export class AeroErrorPanel extends AeroPresenterElement {
 }
 
 const prototypeOptions = Object.freeze([
-  Object.freeze({ id: "flow", label: "Flow · Grid", rulesetId: rulesetIds[0], recipeId: "" }),
-  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[1] }),
-  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[1] })
+  Object.freeze({ id: "flow", label: "Flow · Grid", productLabel: "Flow", rulesetId: rulesetIds[0], recipeId: "" }),
+  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", productLabel: "Semantic Row", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", productLabel: "Spatial Row", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", productLabel: "Semantic Cut", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[1] }),
+  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", productLabel: "Spatial Cut", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[1] })
 ]);
 
 const profileClasses = Object.freeze(["live_visual", "between_run_ruleset", "converter_regeneration"]);
 const scoringChangeStates = Object.freeze(["idle", "calibrating", "paused_manual", "paused_tracking", "completed", "stopped"]);
 
-/** Flow/four-Boxing prototype and three-class experimental profile presenter. */
+/** Flow/four-Boxing prototype and three-class experimental profile presenter. Product embeds may narrow it to Gameplay or Visuals with `[scope]`. */
 export class AeroPrototypeSelector extends AeroPresenterElement {
+  static get observedAttributes() { return ["scope"]; }
+
+  /** Narrow product view, or the unchanged full development view when omitted. @returns {"gameplay" | "visuals" | "full"} */
+  get scope() {
+    const value = this.getAttribute("scope");
+    return value === "gameplay" || value === "visuals" ? value : "full";
+  }
+
+  /** @param {string | null} value */
+  set scope(value) {
+    if (value === "gameplay" || value === "visuals") this.setAttribute("scope", value);
+    else this.removeAttribute("scope");
+  }
+
+  /** @returns {void} */
+  attributeChangedCallback() { this.render(); }
+
   /** Atomically accept an exact public profile snapshot; malformed input preserves prior state. @param {AeroPresenterSnapshot} snapshot */
   setSnapshot(snapshot) {
     if (!isPlainRecord(snapshot) || (Object.hasOwn(snapshot, "profileClasses") && !isValidProfilePresenterSnapshot(snapshot))) return;
@@ -469,12 +486,32 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
   render() {
     const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
     const selected = prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow";
+    if (this.scope === "gameplay") {
+      const options = prototypeOptions.map((option) => Object.freeze({ id: option.id, label: option.productLabel, profileClass: "", profileVersion: "", contentHash: "" }));
+      this.renderMarkup(productRadioMarkup("Gameplay", "gameplay-choice", options, Math.max(0, options.findIndex((option) => option.id === selected)), "prototype-select"));
+      return;
+    }
+    if (this.scope === "visuals") {
+      const visualState = readRecordList(this.presenterSnapshot, "profileClasses").find((state) => readString(state, "class", "") === "live_visual");
+      const active = visualState ? readRecord(visualState, "active") : null;
+      const options = visualState ? readRecordList(visualState, "profiles").map((profile) => Object.freeze({ id: readString(profile, "profileId", ""), label: visualProfileLabel(readString(profile, "profileId", "")), profileClass: "live_visual", profileVersion: readString(profile, "profileVersion", ""), contentHash: readString(profile, "contentHash", "") })).filter((option) => option.id !== "") : [];
+      const activeIndex = active ? options.findIndex((option) => option.id === readString(active, "profileId", "") && option.profileVersion === readString(active, "profileVersion", "") && option.contentHash === readString(active, "contentHash", "")) : -1;
+      this.renderMarkup(productRadioMarkup("Visuals", "visual-choice", options, Math.max(0, activeIndex), "prototype-profile-select"));
+      return;
+    }
     const sessionState = readString(this.presenterSnapshot, "sessionState", "idle");
     const scoringDisabled = !scoringChangeStates.includes(sessionState);
     const scoringReason = scoringDisabled ? (sessionState === "countdown" ? "Scoring profiles are locked during countdown." : "Pause or finish the run to change scoring profiles.") : "Scoring profile changes apply between runs.";
     const classStates = normalizeProfileClassStates(this.presenterSnapshot);
     const statusText = classStates.length === 3 ? "Visual, scoring, and converter profile state loaded." : "Profile state is incomplete.";
     this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="profiles-heading"><h2 id="profiles-heading">Workout prototype</h2><div class="cards" part="profiles" role="radiogroup" aria-label="Prototype presentation">${prototypeOptions.map((option) => `<button type="button" part="profile" role="radio" aria-checked="${selected === option.id}" tabindex="${selected === option.id ? "0" : "-1"}" data-intent="prototype-select" data-value="${option.id}"><strong>${escapeHtml(option.label)}</strong><span class="muted">${escapeHtml(option.rulesetId)}${option.recipeId ? ` · ${escapeHtml(option.recipeId)}` : ""}</span></button>`).join("")}</div><p class="muted live compact-status" role="status" aria-live="polite">${escapeHtml(statusText)}</p><section class="stack" part="telemetry" aria-label="Experimental profile management">${classStates.map((state) => profileClassMarkup(state, scoringDisabled, scoringReason)).join("") || `<p class="muted">No valid experimental profile state loaded.</p>`}</section><div class="row" aria-label="Profile bundle actions"><button type="button" part="import-button" data-intent="tuning-import-request" aria-label="Import experimental profile bundle">Import profiles</button><button type="button" part="export-button" data-intent="tuning-export" aria-label="Export experimental profile bundle">Export profiles</button><button type="button" part="reset-button" data-intent="tuning-reset" aria-label="Reset experimental profiles">Reset profiles</button></div></section>`);
+  }
+
+  /** Native scoped radios commit on `change`; full-view buttons retain the inherited click path. @param {Event} event */
+  handleDelegatedClick(event) {
+    const target = event.composedPath()[0];
+    if (this.scope !== "full" && target instanceof HTMLInputElement && target.type === "radio") return;
+    super.handleDelegatedClick(event);
   }
 
   /** @param {string} type @param {HTMLElement} target */
@@ -647,6 +684,18 @@ function formatBytes(bytes) { if (bytes < 1024) return `${Math.max(0, Math.round
 function calibrationMessage(state) { const messages = /** @type {Readonly<Record<string, string>>} */ ({ waiting: "Step back until your upper body is visible.", holding: "Hold a steady T-pose for four seconds.", cooldown: "Calibration captured. Relax your arms.", calibrated: "Calibration ready.", tracking_lost: "Tracking lost. A fresh calibration is required.", error: "Calibration could not complete." }); return messages[state] ?? "Calibration required."; }
 /** @typedef {Readonly<{schema:"aerobeat/prototype_tuning_identity",version:1,profileId:string,profileVersion:string,contentHash:string,class:string,regenerationRequired:boolean}>} ProfileIdentity */
 /** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],experimental:boolean,selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
+/** @typedef {Readonly<{id:string,label:string,profileClass:string,profileVersion:string,contentHash:string}>} ProductRadioOption */
+
+/** Native product radio group with no development identity text. @param {string} heading @param {string} name @param {readonly ProductRadioOption[]} options @param {number} selectedIndex @param {string} intent @returns {string} */
+function productRadioMarkup(heading, name, options, selectedIndex, intent) {
+  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">${escapeHtml(heading)}</h2><fieldset part="choices"><legend class="visually-hidden">Choose ${escapeHtml(heading)}</legend><div class="product-radios">${options.map((option, index) => `<label class="product-radio"><input type="radio" name="${escapeAttribute(name)}" value="${escapeAttribute(option.id)}" data-intent="${escapeAttribute(intent)}" data-value="${escapeAttribute(option.id)}" data-profile-class="${escapeAttribute(option.profileClass)}" data-profile-version="${escapeAttribute(option.profileVersion)}" data-content-hash="${escapeAttribute(option.contentHash)}" ${index === selectedIndex ? "checked" : ""}><span>${escapeHtml(option.label)}</span></label>`).join("")}</div></fieldset></section><style>:host([scope]) .product-selector{gap:8px}:host([scope]) fieldset{border:0;margin:0;min-inline-size:0;padding:0}:host([scope]) .product-radios{display:grid;gap:6px}:host([scope]) .product-radio{align-items:center;background:rgba(255,255,255,.72);border:1px solid rgba(53,141,175,.3);border-radius:10px;cursor:pointer;display:flex;font-size:1rem;gap:10px;min-block-size:42px;padding:0 10px}:host([scope]) .product-radio:has(input:checked){background:rgba(10,132,255,.14);border-color:var(--aero-color-focus,#0a84ff);box-shadow:inset 0 0 0 1px var(--aero-color-focus,#0a84ff)}:host([scope]) .product-radio input[type="radio"]{accent-color:var(--aero-color-focus,#0a84ff);block-size:42px;flex:0 0 42px;inline-size:42px;margin:0;padding:0}:host([scope]) .product-radio span{font-weight:750}:host([scope][compact]) .product-selector h2{block-size:1px;clip:rect(0 0 0 0);clip-path:inset(50%);inline-size:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;white-space:nowrap}</style>`;
+}
+
+/** Human-facing live visual label. @param {string} profileId @returns {string} */
+function visualProfileLabel(profileId) {
+  const productName = profileId.replace(/^aero\.visual\./u, "").replaceAll(/(?:^|[._-])experimental(?:[._-]|$)/giu, " ").trim();
+  return titleCase(productName || "Visual");
+}
 
 /** Validate one complete selector snapshot without invoking accessors. @param {unknown} value @returns {boolean} */
 function isValidProfilePresenterSnapshot(value) {
