@@ -22,7 +22,7 @@ export const aeroPosePreviewSkeletonConnections = Object.freeze([
 ]);
 
 /**
- * MoveNet upper-body landmarks visible in the phone calibration checkpoint.
+ * Upper-body pose landmarks visible in the phone calibration checkpoint.
  *
  * @type {ReadonlyMap<string, number>}
  */
@@ -137,7 +137,7 @@ const aeroPosePreviewTrackingProfiles = Object.freeze({
 
 /**
  * @typedef {object} AeroMediaPosePreviewLandmark
- * @property {number} id Stable MoveNet landmark identifier.
+ * @property {number} id Stable pose landmark identifier.
  * @property {string} name Stable AeroBeat landmark name.
  * @property {number} x Smoothed normalized horizontal position.
  * @property {number} y Smoothed normalized vertical position.
