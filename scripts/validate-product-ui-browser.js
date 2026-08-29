@@ -351,7 +351,7 @@ try {
       const bounds = control.getBoundingClientRect();
       return getComputedStyle(control).display !== "none" && bounds.width >= 42 && bounds.height >= 42;
     });
-    const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("select")?.getAttribute("aria-label") === "Version";
+    const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("output")?.getAttribute("aria-label") === "Version" && isolatedBrowser.shadowRoot?.querySelector("select")?.getAttribute("aria-label") === "Difficulty";
     const compactCriticalVisible = getComputedStyle(compactCalibration.shadowRoot?.querySelector("[role='status']")).display !== "none" && getComputedStyle(hostileSelector.shadowRoot?.querySelector(".pill.error")).display !== "none" && getComputedStyle(compactError.shadowRoot?.querySelector(".error")).display !== "none";
     const styleSignature = (button) => { const style = getComputedStyle(button); return `${style.backgroundImage}|${style.borderColor}|${style.boxShadow}|${style.color}`; };
     const selectedGameplay = hostileSelector.shadowRoot?.querySelector("button[role='radio'][aria-checked='true']");
@@ -693,6 +693,12 @@ try {
       const mapBrowser = document.createElement("aero-beatsaver-browser");
       mapBrowser.setAttribute("compact", "");
       mapBrowser.setSnapshot({ state: "results", query: "Music", results: [{ mapId: "alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: "beta", name: "Beta Song", songAuthorName: "Beta Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
+      const multiMapBrowser = document.createElement("aero-beatsaver-browser");
+      multiMapBrowser.setAttribute("compact", "");
+      multiMapBrowser.setSnapshot({ state: "results", results: [{ mapId: "multi", name: "Multi Song", songAuthorName: "Artist" }], selectedMap: { mapId: "multi", name: "Multi Song" }, versions: [{ versionHash: "b".repeat(40), label: "One" }, { versionHash: "c".repeat(40), label: "Two" }], difficulties: ["Hard", "Expert"], selectedVersionHash: "b".repeat(40), selectedDifficulty: "Hard" });
+      const zeroMapBrowser = document.createElement("aero-beatsaver-browser");
+      zeroMapBrowser.setAttribute("compact", "");
+      zeroMapBrowser.setSnapshot({ state: "results", results: [{ mapId: "zero", name: "Zero Song", songAuthorName: "Artist" }], selectedMap: { mapId: "zero", name: "Zero Song" }, versions: [], difficulties: [], selectedVersionHash: "", selectedDifficulty: "" });
       const library = document.createElement("aero-content-library");
       library.setAttribute("compact", "");
       library.setSnapshot({ selectedPackageId: "package-beta", packages: [
@@ -706,7 +712,7 @@ try {
       const oneLibrary = document.createElement("aero-content-library");
       oneLibrary.setAttribute("compact", "");
       oneLibrary.setSnapshot({ selectedPackageId: "missing", packages: [{ key: "one", packageId: "package-one", packageHash: `sha256:${"4".repeat(64)}`, songName: "Only Download", difficulty: "Normal", createdAtMs: 400, assetCount: 1, sourceCacheCount: 0 }] });
-      app.append(mapBrowser, library, emptyLibrary, oneLibrary);
+      app.append(mapBrowser, multiMapBrowser, zeroMapBrowser, library, emptyLibrary, oneLibrary);
       const hosts = [mapBrowser, library];
       const radios = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const buttons = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
@@ -715,7 +721,21 @@ try {
       const localActions = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])];
       const initialCheckedValues = hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? "");
       const captured = [];
+      mapBrowser.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
       library.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
+      mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-preview-toggle']")?.click();
+      library.shadowRoot?.querySelector("button[data-intent='library-preview-toggle']")?.click();
+      const remotePreviewIntent = captured.find((intent) => intent?.type === "beatsaver-preview-toggle")?.payload;
+      const localPreviewIntent = captured.find((intent) => intent?.type === "library-preview-toggle")?.payload;
+      mapBrowser.setSnapshot({ ...mapBrowser.presenterSnapshot, preview: { state: "playing", mapId: "beta", versionHash: "a".repeat(40), packageId: "", errorMessage: "" } });
+      library.setSnapshot({ ...library.presenterSnapshot, preview: { state: "loading", mapId: "", versionHash: "", packageId: "package-beta", errorMessage: "" } });
+      const remoteStop = mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-preview-toggle']")?.textContent?.trim() ?? "";
+      const localStop = library.shadowRoot?.querySelector("button[data-intent='library-preview-toggle']")?.textContent?.trim() ?? "";
+      mapBrowser.setSnapshot({ ...mapBrowser.presenterSnapshot, preview: { state: "ended", mapId: "beta", versionHash: "a".repeat(40), packageId: "", errorMessage: "" } });
+      library.setSnapshot({ ...library.presenterSnapshot, preview: { state: "error", mapId: "", versionHash: "", packageId: "package-beta", errorMessage: "Preview unavailable." } });
+      const remoteEnded = mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-preview-toggle']")?.textContent?.trim() ?? "";
+      const localErrorLabel = library.shadowRoot?.querySelector("button[data-intent='library-preview-toggle']")?.textContent?.trim() ?? "";
+      const localError = library.shadowRoot?.querySelector(".compact-library-actions [role='status'].error")?.textContent?.trim() ?? "";
       const secondDuplicate = library.shadowRoot?.querySelector("input[value='package-alpha-two']");
       secondDuplicate?.focus();
       secondDuplicate?.click();
@@ -737,6 +757,18 @@ try {
         localActionIntents: localActions.map((button) => button.dataset.intent ?? ""),
         localActionIds: localActions.map((button) => button.dataset.value ?? ""),
         selectedActionAreas: library.shadowRoot?.querySelectorAll("[part='selected-actions']").length ?? 0,
+        singletonOutputs: [...(mapBrowser.shadowRoot?.querySelectorAll(".compact-singleton-field output") ?? [])].map((output) => `${output.getAttribute("aria-label")}:${output.textContent?.trim() ?? ""}`),
+        singletonSelects: mapBrowser.shadowRoot?.querySelectorAll("select").length ?? -1,
+        multiSelects: multiMapBrowser.shadowRoot?.querySelectorAll("select").length ?? -1,
+        zeroErrors: zeroMapBrowser.shadowRoot?.querySelectorAll("[role='status'].error").length ?? -1,
+        zeroDisabledActions: [...(zeroMapBrowser.shadowRoot?.querySelectorAll("button[data-intent='beatsaver-preview-toggle'],button[data-intent='beatsaver-import']") ?? [])].every((button) => button.hasAttribute("disabled")),
+        remotePreviewIntent,
+        localPreviewIntent,
+        remoteStop,
+        localStop,
+        remoteEnded,
+        localErrorLabel,
+        localError,
         noPlay: ![...buttons].some((button) => button.textContent?.trim() === "Play"),
         switched,
         switchedActionIds,
@@ -753,11 +785,13 @@ try {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         controlsVisible: currentControls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.display !== "none"; })
       };
+      multiMapBrowser.remove();
+      zeroMapBrowser.remove();
       emptyLibrary.remove();
       oneLibrary.remove();
       return result;
     });
-    assert(Boolean(musicEvidence) && musicEvidence.mapLabels.join("|") === "Alpha Song|Beta Song" && musicEvidence.localLabels.join("|") === "Alpha Download · Hard · 1|Alpha Download · Hard · 2|Beta Download · Expert" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 6 && musicEvidence.localActionIntents.join(",") === "library-export,library-delete-request" && musicEvidence.localActionIds.every((id) => id === "package-beta") && musicEvidence.selectedActionAreas === 1 && musicEvidence.noPlay && musicEvidence.switched === "package-alpha-two" && musicEvidence.switchedActionIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeleteIntents.join(",") === "library-export,library-delete,library-delete-cancel" && musicEvidence.compactDeleteIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeletePrompt === "Delete Alpha Download · Hard · 2?" && musicEvidence.compactDeleteCancelled === "library-export,library-delete-request" && musicEvidence.emptyRadios === 0 && musicEvidence.emptyActions === 0 && musicEvidence.emptyText.includes("No downloaded songs") && musicEvidence.oneChecked === "package-one" && musicEvidence.oneActions.join(",") === "library-export,library-delete-request" && musicEvidence.selects === 2 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
+    assert(Boolean(musicEvidence) && musicEvidence.mapLabels.join("|") === "Alpha Song|Beta Song" && musicEvidence.localLabels.join("|") === "Alpha Download · Hard · 1|Alpha Download · Hard · 2|Beta Download · Expert" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 8 && musicEvidence.localActionIntents.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.localActionIds.every((id) => id === "package-beta") && musicEvidence.selectedActionAreas === 1 && musicEvidence.singletonOutputs.join("|") === "Version:Current|Difficulty:Hard" && musicEvidence.singletonSelects === 0 && musicEvidence.multiSelects === 2 && musicEvidence.zeroErrors === 2 && musicEvidence.zeroDisabledActions && musicEvidence.remotePreviewIntent?.mapId === "beta" && musicEvidence.remotePreviewIntent?.versionHash === "a".repeat(40) && Object.keys(musicEvidence.remotePreviewIntent).length === 2 && musicEvidence.localPreviewIntent?.packageId === "package-beta" && Object.keys(musicEvidence.localPreviewIntent).length === 1 && musicEvidence.remoteStop === "Stop" && musicEvidence.localStop === "Stop" && musicEvidence.remoteEnded === "Preview" && musicEvidence.localErrorLabel === "Preview" && musicEvidence.localError === "Preview unavailable." && musicEvidence.noPlay && musicEvidence.switched === "package-alpha-two" && musicEvidence.switchedActionIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeleteIntents.join(",") === "library-preview-toggle,library-export,library-delete,library-delete-cancel" && musicEvidence.compactDeleteIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeletePrompt === "Delete Alpha Download · Hard · 2?" && musicEvidence.compactDeleteCancelled === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.emptyRadios === 0 && musicEvidence.emptyActions === 0 && musicEvidence.emptyText.includes("No downloaded songs") && musicEvidence.oneChecked === "package-one" && musicEvidence.oneActions.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.selects === 0 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
     await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
     await musicPage.close();
   }
@@ -841,10 +875,10 @@ try {
     const expectedVisible = {
       gameplay: ["Flow", "Semantic Row", "Spatial Row", "Semantic Cut", "Spatial Cut"],
       visuals: ["Default", "Compact"],
-      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Import selected map"],
+      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Difficulty", "Hard", "Import selected map"],
       empty: ["Search", "Latest", "Choose local ZIP"],
       importProgress: ["Converting · 63%", "Cancel import"],
-      library: ["Alpha Package", "Beta Package", "Export", "Delete"],
+      library: ["Alpha Package", "Beta Package", "Preview", "Export", "Delete"],
       capabilities: ["Camera permission blocks play."],
       error: ["Camera permission is required.", "Try again"],
       fullscreen: ["Enter fullscreen"]
@@ -855,7 +889,7 @@ try {
       allowlistPage.getByRole("radio", { name: "Alpha Song", exact: true }).count(),
       allowlistPage.getByRole("radio", { name: "Select Beta Package", exact: true }).count(),
       allowlistPage.getByRole("textbox", { name: "Search maps", exact: true }).count(),
-      allowlistPage.getByRole("combobox", { name: "Version", exact: true }).count()
+      allowlistPage.locator('aero-beatsaver-browser').first().locator('output[aria-label="Version"]').count()
     ]);
     assert(accessibleNameCounts.join(",") === "1,1,2,1", `${viewport.name} compact controls lost exact accessible names: ${accessibleNameCounts.join(",")}.`);
     await allowlistPage.screenshot({ path: `screenshots/task12-ui-compact-copy-allowlist-${viewport.name}.png`, fullPage: true });

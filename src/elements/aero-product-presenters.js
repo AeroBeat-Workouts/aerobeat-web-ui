@@ -59,6 +59,10 @@ const sharedStyles = `
   :host([compact]) .compact-library-choice input[type="radio"] { accent-color: var(--aero-color-focus,#0a84ff); block-size: 42px; flex: 0 0 42px; inline-size: 42px; margin: 0; padding: 0; }
   :host([compact]) .compact-library-choice span { font-weight: 750; min-inline-size: 0; overflow-wrap: anywhere; }
   :host([compact]) .compact-library-actions { border-block-start: 1px solid rgba(53,141,175,.32); margin-block-start: 2px; padding-block-start: 8px; }
+  :host([compact]) .compact-preview-action { inline-size: 100%; }
+  :host([compact]) .compact-singleton-field { align-items: center; background: rgba(255,255,255,.88); border: 1px solid rgba(53,141,175,.42); border-radius: 8px; display: grid; gap: 2px; min-block-size: 42px; padding: 5px 10px; }
+  :host([compact]) .compact-singleton-field > span { color: var(--aero-color-muted,#486c7d); font-size: .7rem; font-weight: 750; }
+  :host([compact]) .compact-singleton-field > output { font-size: .92rem; font-weight: 750; min-inline-size: 0; overflow-wrap: anywhere; }
   @media (max-width: 430px) { .panel { border-radius: 10px; padding: 12px; } .row > button { flex: 1 1 auto; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 `;
@@ -179,6 +183,13 @@ class AeroPresenterElement extends HTMLElement {
 
 /** BeatSaver discovery, detail, version, difficulty and local-import intent presenter. */
 export class AeroBeatSaverBrowser extends AeroPresenterElement {
+  static observedAttributes = ["compact"];
+
+  /** Compact changes selected-map choice markup; removing it restores the default presenter exactly. @param {string} name @param {string | null} oldValue @param {string | null} newValue */
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name === "compact" && oldValue !== newValue && this.isConnected) this.render();
+  }
+
   render() {
     const state = readString(this.presenterSnapshot, "state", "idle");
     const query = readString(this.presenterSnapshot, "query", "");
@@ -193,6 +204,7 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
     const selectedDifficulty = readString(this.presenterSnapshot, "selectedDifficulty", "");
     const error = readString(this.presenterSnapshot, "errorMessage", "");
     const busy = state === "loading";
+    const detail = selected ? (this.compact ? compactBeatSaverDetailMarkup(selected, versions, difficulties, selectedVersion, selectedDifficulty, previewSnapshot(this.presenterSnapshot)) : defaultBeatSaverDetailMarkup(selected, versions, difficulties, selectedVersion, selectedDifficulty)) : "";
     this.renderMarkup(`
       <section class="panel" part="panel" aria-labelledby="beatsaver-heading">
         <h2 id="beatsaver-heading">Find BeatSaver maps</h2>
@@ -206,10 +218,7 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
         <div class="cards choice-radios" part="results" role="radiogroup" aria-label="BeatSaver results">
           ${results.map((result, index) => mapResultMarkup(result, index === checkedResultIndex)).join("") || `<p class="muted">${state === "empty" ? "No compatible maps found." : "Search or browse latest maps."}</p>`}
         </div>
-        ${selected ? `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(readString(selected, "name", "Selected map"))}</h3><p class="muted">${escapeHtml(readString(selected, "songAuthorName", ""))} · mapped by ${escapeHtml(readString(selected, "levelAuthorName", "Unknown"))}</p>
-          <label><span class="compact-field-label">Version</span><select aria-label="Version" part="version-select" data-intent="beatsaver-version-select">${versions.map((version) => optionMarkup(readString(version, "versionHash", ""), readString(version, "label", readString(version, "versionHash", "Version")), selectedVersion)).join("")}</select></label>
-          <label><span class="compact-field-label">Difficulty</span><select aria-label="Difficulty" part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select></label>
-          <button part="import-button" type="button" data-intent="beatsaver-import" ${selectedVersion && selectedDifficulty ? "" : "disabled"}>Import selected map</button></section>` : ""}
+        ${detail}
       </section>`);
   }
 
@@ -241,6 +250,10 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
     }
     if (type === "beatsaver-difficulty-select") {
       this.emitIntent(type, { mapId, versionHash, difficultyId: target instanceof HTMLSelectElement ? target.value : "" });
+      return;
+    }
+    if (type === "beatsaver-preview-toggle") {
+      this.emitIntent(type, { mapId, versionHash });
       return;
     }
     if (type === "beatsaver-import") {
@@ -304,7 +317,7 @@ export class AeroContentLibrary extends AeroPresenterElement {
     const checkedPackageIndex = packages.length ? Math.max(0, selectedPackageIndex) : -1;
     if (this.pendingDeletePackageId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeletePackageId)) this.pendingDeletePackageId = "";
     if (this.compact) {
-      this.renderMarkup(compactLibraryMarkup(packages, checkedPackageIndex, this.pendingDeletePackageId, error));
+      this.renderMarkup(compactLibraryMarkup(packages, checkedPackageIndex, this.pendingDeletePackageId, error, previewSnapshot(this.presenterSnapshot)));
       return;
     }
     this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards choice-radios" part="items" role="radiogroup" aria-label="Available library packages">${packages.map((item, index) => libraryItemMarkup(item, this.pendingDeletePackageId, index === checkedPackageIndex)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
@@ -328,6 +341,10 @@ export class AeroContentLibrary extends AeroPresenterElement {
         this.render();
         queueMicrotask(() => [...(this.shadowRoot?.querySelectorAll("input[name='library-package-choice']") ?? [])].find((input) => input instanceof HTMLInputElement && input.value === packageId)?.focus());
       }
+      return;
+    }
+    if (type === "library-preview-toggle") {
+      this.emitIntent(type, { packageId });
       return;
     }
     if (type === "library-delete-request") {
@@ -726,8 +743,54 @@ function statusText(state, count) { if (state === "loading") return "Loading Bea
 function mapResultMarkup(result, checked) { const id = readString(result, "mapId", ""); const name = readString(result, "name", "Untitled map"); const author = readString(result, "songAuthorName", "Unknown artist"); return `<article><label class="card choice-radio" part="result"><input type="radio" name="beatsaver-map-choice" value="${escapeAttribute(id)}" data-intent="beatsaver-select-map" data-value="${escapeAttribute(id)}" ${checked ? "checked" : ""}><span class="choice-copy"><strong>${escapeHtml(name)}</strong><span class="muted">${escapeHtml(author)} · ${escapeHtml(id)}</span></span></label></article>`; }
 /** @param {string} value @param {string} label @param {string} selected @returns {string} */
 function optionMarkup(value, label, selected) { return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`; }
-/** Compact quick-choice library using the real persistence-summary shape. @param {readonly Readonly<Record<string, unknown>>[]} packages @param {number} checkedIndex @param {string} pendingDeletePackageId @param {string} error @returns {string} */
-function compactLibraryMarkup(packages, checkedIndex, pendingDeletePackageId, error) {
+/** @typedef {Readonly<{state:"idle"|"loading"|"playing"|"ended"|"error",mapId:string,versionHash:string,packageId:string,errorMessage:string}>} PreviewSnapshot */
+
+/** Default selected-map markup remains byte-for-byte compatible when compact mode is absent. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versions @param {readonly string[]} difficulties @param {string} selectedVersion @param {string} selectedDifficulty @returns {string} */
+function defaultBeatSaverDetailMarkup(selected, versions, difficulties, selectedVersion, selectedDifficulty) {
+  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(readString(selected, "name", "Selected map"))}</h3><p class="muted">${escapeHtml(readString(selected, "songAuthorName", ""))} · mapped by ${escapeHtml(readString(selected, "levelAuthorName", "Unknown"))}</p>
+          <label><span class="compact-field-label">Version</span><select aria-label="Version" part="version-select" data-intent="beatsaver-version-select">${versions.map((version) => optionMarkup(readString(version, "versionHash", ""), readString(version, "label", readString(version, "versionHash", "Version")), selectedVersion)).join("")}</select></label>
+          <label><span class="compact-field-label">Difficulty</span><select aria-label="Difficulty" part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select></label>
+          <button part="import-button" type="button" data-intent="beatsaver-import" ${selectedVersion && selectedDifficulty ? "" : "disabled"}>Import selected map</button></section>`;
+}
+
+/** Compact selected-map markup exposes preview and only real choices as select controls. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versionRecords @param {readonly string[]} difficultyValues @param {string} selectedVersion @param {string} selectedDifficulty @param {PreviewSnapshot} preview @returns {string} */
+function compactBeatSaverDetailMarkup(selected, versionRecords, difficultyValues, selectedVersion, selectedDifficulty, preview) {
+  const mapId = readBoundedString(selected, "mapId", "", 256);
+  const mapName = readBoundedString(selected, "name", "Selected map", 256);
+  const versions = versionRecords.filter((version) => readBoundedString(version, "versionHash", "", 256) !== "");
+  const difficulties = difficultyValues.filter((difficulty) => difficulty.length > 0).map((difficulty) => difficulty.slice(0, 128));
+  const effectiveVersion = versions.some((version) => readString(version, "versionHash", "") === selectedVersion) ? selectedVersion : readString(versions[0] ?? {}, "versionHash", "");
+  const effectiveDifficulty = difficulties.includes(selectedDifficulty) ? selectedDifficulty : difficulties[0] ?? "";
+  const exactPreview = preview.mapId === mapId && preview.versionHash === effectiveVersion;
+  const previewActive = exactPreview && (preview.state === "loading" || preview.state === "playing");
+  const previewError = exactPreview && preview.state === "error" ? preview.errorMessage : "";
+  const previewLabel = previewActive ? "Stop" : "Preview";
+  const versionField = compactChoiceFieldMarkup("Version", "version-select", "beatsaver-version-select", versions.map((version) => ({ value: readString(version, "versionHash", ""), label: readString(version, "label", readString(version, "versionHash", "Version")) })), effectiveVersion);
+  const difficultyField = compactChoiceFieldMarkup("Difficulty", "difficulty-select", "beatsaver-difficulty-select", difficulties.map((difficulty) => ({ value: difficulty, label: difficulty })), effectiveDifficulty);
+  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(mapName)}</h3><button class="compact-preview-action" part="preview-button" type="button" data-intent="beatsaver-preview-toggle" aria-label="${previewLabel} ${escapeAttribute(mapName)}" aria-pressed="${previewActive}" aria-busy="${preview.state === "loading" && exactPreview}" ${effectiveVersion ? "" : "disabled"}>${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${versionField}${difficultyField}<button part="import-button" type="button" data-intent="beatsaver-import" ${effectiveVersion && effectiveDifficulty ? "" : "disabled"}>Import selected map</button></section>`;
+}
+
+/** @typedef {Readonly<{value:string,label:string}>} CompactChoice */
+/** A compact field is static for one value, a native select for real choice, and an error for none. @param {string} label @param {string} part @param {string} intent @param {readonly CompactChoice[]} choices @param {string} selected @returns {string} */
+function compactChoiceFieldMarkup(label, part, intent, choices, selected) {
+  if (choices.length === 0) return `<p class="error" role="status">${escapeHtml(label)} unavailable.</p>`;
+  if (choices.length === 1) return `<div class="compact-singleton-field" part="${escapeAttribute(part)}"><span>${escapeHtml(label)}</span><output aria-label="${escapeAttribute(label)}">${escapeHtml(choices[0].label)}</output></div>`;
+  return `<label><span class="compact-field-label">${escapeHtml(label)}</span><select aria-label="${escapeAttribute(label)}" part="${escapeAttribute(part)}" data-intent="${escapeAttribute(intent)}">${choices.map((choice) => optionMarkup(choice.value, choice.label, selected)).join("")}</select></label>`;
+}
+
+/** Read bounded scalar preview presentation state only. @param {Readonly<Record<string, unknown>>} snapshot @returns {PreviewSnapshot} */
+function previewSnapshot(snapshot) {
+  const preview = readRecord(snapshot, "preview") ?? {};
+  const rawState = readBoundedString(preview, "state", "idle", 32);
+  const state = /** @type {PreviewSnapshot["state"]} */ (["idle", "loading", "playing", "ended", "error"].includes(rawState) ? rawState : "idle");
+  return Object.freeze({ state, mapId: readBoundedString(preview, "mapId", "", 256), versionHash: readBoundedString(preview, "versionHash", "", 256), packageId: readBoundedString(preview, "packageId", "", 1024), errorMessage: readBoundedString(preview, "errorMessage", "", 256) });
+}
+
+/** @param {Readonly<Record<string, unknown>>} record @param {string} key @param {string} fallback @param {number} maximumLength @returns {string} */
+function readBoundedString(record, key, fallback, maximumLength) { return readString(record, key, fallback).slice(0, maximumLength); }
+
+/** Compact quick-choice library using the real persistence-summary shape. @param {readonly Readonly<Record<string, unknown>>[]} packages @param {number} checkedIndex @param {string} pendingDeletePackageId @param {string} error @param {PreviewSnapshot} preview @returns {string} */
+function compactLibraryMarkup(packages, checkedIndex, pendingDeletePackageId, error, preview) {
   const usable = packages.map((item, sourceIndex) => ({ item, sourceIndex, id: readString(item, "packageId", ""), base: compactLibraryBaseLabel(item) })).filter((entry) => entry.id !== "");
   const checked = usable.findIndex((entry) => entry.sourceIndex === checkedIndex);
   const checkedUsableIndex = usable.length ? Math.max(0, checked) : -1;
@@ -744,7 +807,7 @@ function compactLibraryMarkup(packages, checkedIndex, pendingDeletePackageId, er
     return `<label class="compact-library-choice" part="item"><input type="radio" name="library-package-choice" value="${escapeAttribute(entry.id)}" data-intent="library-select" data-value="${escapeAttribute(entry.id)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedUsableIndex ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
   }).join("");
   const selected = checkedUsableIndex >= 0 ? usable[checkedUsableIndex] : null;
-  const actions = selected ? compactLibraryActions(selected.item, pendingDeletePackageId, labels[checkedUsableIndex] ?? selected.base) : "";
+  const actions = selected ? compactLibraryActions(selected.item, pendingDeletePackageId, labels[checkedUsableIndex] ?? selected.base, preview) : "";
   return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}</section>`;
 }
 
@@ -755,15 +818,19 @@ function compactLibraryBaseLabel(item) {
   return difficulty ? `${songName} · ${difficulty}` : songName;
 }
 
-/** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {string} label @returns {string} */
-function compactLibraryActions(item, pendingDeletePackageId, label) {
+/** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {string} label @param {PreviewSnapshot} preview @returns {string} */
+function compactLibraryActions(item, pendingDeletePackageId, label, preview) {
   const id = readString(item, "packageId", "");
   const accessibleLabel = escapeAttribute(label);
   const pending = id !== "" && id === pendingDeletePackageId;
+  const exactPreview = preview.packageId === id;
+  const previewActive = exactPreview && (preview.state === "loading" || preview.state === "playing");
+  const previewLabel = previewActive ? "Stop" : "Preview";
+  const previewError = exactPreview && preview.state === "error" ? preview.errorMessage : "";
   const deleteControls = pending
     ? `<span role="status">Delete ${escapeHtml(label)}?</span><button type="button" aria-label="Confirm delete ${accessibleLabel}" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm</button><button type="button" aria-label="Cancel deleting ${accessibleLabel}" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
     : `<button type="button" aria-label="Delete ${accessibleLabel}" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
-  return `<div class="row compact-library-actions" part="selected-actions" aria-label="Selected song actions"><button type="button" aria-label="Export ${accessibleLabel}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div>`;
+  return `<div class="row compact-library-actions" part="selected-actions" aria-label="Selected song actions"><button class="compact-preview-action" part="preview-button" type="button" aria-label="${previewLabel} ${accessibleLabel}" aria-pressed="${previewActive}" aria-busy="${exactPreview && preview.state === "loading"}" data-intent="library-preview-toggle" data-value="${escapeAttribute(id)}">${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}<button type="button" aria-label="Export ${accessibleLabel}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div>`;
 }
 
 /** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {boolean} checked @returns {string} */
