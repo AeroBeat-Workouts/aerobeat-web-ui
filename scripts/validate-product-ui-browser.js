@@ -252,6 +252,12 @@ try {
     });
     const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("select")?.getAttribute("aria-label") === "Version";
     const compactCriticalVisible = getComputedStyle(compactCalibration.shadowRoot?.querySelector("[role='status']")).display !== "none" && getComputedStyle(hostileSelector.shadowRoot?.querySelector(".pill.error")).display !== "none" && getComputedStyle(compactError.shadowRoot?.querySelector(".error")).display !== "none";
+    const styleSignature = (button) => { const style = getComputedStyle(button); return `${style.backgroundImage}|${style.borderColor}|${style.boxShadow}|${style.color}`; };
+    const selectedGameplay = hostileSelector.shadowRoot?.querySelector("button[role='radio'][aria-checked='true']");
+    const unselectedGameplay = hostileSelector.shadowRoot?.querySelector("button[role='radio'][aria-checked='false']");
+    const compactGameplaySelectionVisible = selectedGameplay instanceof HTMLButtonElement && unselectedGameplay instanceof HTMLButtonElement && styleSignature(selectedGameplay) !== styleSignature(unselectedGameplay);
+    const profileGroups = [...(hostileSelector.shadowRoot?.querySelectorAll("article[data-profile-class]") ?? [])].map((article) => [...article.querySelectorAll("button[data-intent='prototype-profile-select']")]);
+    const compactProfileSelectionVisible = profileGroups.every((buttons) => buttons.filter((button) => button.getAttribute("aria-pressed") === "true").length === 1 && (buttons.length < 2 || styleSignature(buttons.find((button) => button.getAttribute("aria-pressed") === "true")) !== styleSignature(buttons.find((button) => button.getAttribute("aria-pressed") === "false"))));
     for (const host of compactHosts) Reflect.set(host, "compact", false);
     const compactDefaultRestored = compactHosts.every((host, index) => !host.hasAttribute("compact") && (host.shadowRoot?.innerHTML ?? "") === defaultMarkup[index]);
     const compactToggleIntentFree = captured.length === beforeCompactIntents;
@@ -295,6 +301,8 @@ try {
       compactControlsActionable,
       compactAccessibleFields,
       compactCriticalVisible,
+      compactGameplaySelectionVisible,
+      compactProfileSelectionVisible,
       compactDefaultRestored,
       compactToggleIntentFree
     };
@@ -314,6 +322,7 @@ try {
   assert(adversarial.compactControlsActionable, "Compact mode hid or undersized an actionable control.");
   assert(adversarial.compactAccessibleFields, "Compact mode removed an accessible field name.");
   assert(adversarial.compactCriticalVisible, "Compact mode hid critical live state.");
+  assert(adversarial.compactGameplaySelectionVisible && adversarial.compactProfileSelectionVisible, "Compact mode did not expose distinct visual and ARIA selected truth for gameplay/profile choices.");
   assert(adversarial.compactDefaultRestored && adversarial.compactToggleIntentFree, "Compact toggling changed default DOM/state or emitted an intent.");
 
   mkdirSync("screenshots", { recursive: true });
