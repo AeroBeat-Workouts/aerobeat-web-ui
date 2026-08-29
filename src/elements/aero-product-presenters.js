@@ -36,6 +36,15 @@ const sharedStyles = `
   .card { background: rgba(255,255,255,.72); border: 1px solid rgba(53,141,175,.3); border-radius: 10px; display: grid; gap: 6px; padding: 10px; text-align: start; }
   .cards > article > .card { inline-size: 100%; }
   progress { accent-color: var(--aero-color-focus, #0a84ff); inline-size: 100%; }
+  .visually-hidden { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
+  :host([compact]) .panel { background: transparent; border: 0; border-radius: 0; box-shadow: none; gap: 8px; padding: 0; }
+  :host([compact]) h1, :host([compact]) h2, :host([compact]) h3, :host([compact]) .compact-field-label, :host([compact]) .compact-converter-truth { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
+  :host([compact]) .compact-explanatory, :host([compact]) .compact-identity, :host([compact]) .compact-telemetry, :host([compact]) .muted:not(.live):not(.compact-critical):not(.compact-converter-truth), :host([compact]) .pill:not(.error) { display: none; }
+  :host([compact]) .compact-status:not(.error) { block-size: 1px; clip: rect(0 0 0 0); clip-path: inset(50%); inline-size: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; }
+  :host([compact]) .cards { grid-template-columns: minmax(0, 1fr); }
+  :host([compact]) .card { padding: 8px; }
+  :host([compact]) label { gap: 0; }
+  :host([compact]) .compact-hide-when-clear { display: none; }
   @media (max-width: 430px) { .panel { border-radius: 10px; padding: 12px; } .row > button { flex: 1 1 auto; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 `;
@@ -53,6 +62,12 @@ class AeroPresenterElement extends HTMLElement {
     this.boundSubmit = (event) => this.handleDelegatedSubmit(event);
     this.boundKeydown = (event) => this.handleDelegatedKeydown(event);
   }
+
+  /** Boolean compact rendering mode; equivalent to the provider-neutral `[compact]` attribute. @returns {boolean} */
+  get compact() { return this.hasAttribute("compact"); }
+
+  /** @param {boolean} value */
+  set compact(value) { this.toggleAttribute("compact", value === true); }
 
   connectedCallback() {
     if (!this.shadowRoot) {
@@ -165,18 +180,18 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
       <section class="panel" part="panel" aria-labelledby="beatsaver-heading">
         <h2 id="beatsaver-heading">Find BeatSaver maps</h2>
         <form class="row" part="search" data-form="search">
-          <label style="flex:1 1 14rem">Search maps<input part="search-input" data-field="query" value="${escapeAttribute(query)}" autocomplete="off" ${busy ? "disabled" : ""}></label>
+          <label style="flex:1 1 14rem"><span class="compact-field-label">Search maps</span><input part="search-input" data-field="query" aria-label="Search maps" value="${escapeAttribute(query)}" autocomplete="off" ${busy ? "disabled" : ""}></label>
           <button part="search-button" type="submit" ${busy ? "disabled" : ""}>Search</button>
           <button part="latest-button" type="button" data-intent="beatsaver-latest" ${busy ? "disabled" : ""}>Latest</button>
           <button part="local-import-button" type="button" data-intent="local-zip-request">Choose local ZIP</button>
         </form>
-        <p class="live ${error ? "error" : "muted"}" role="status" aria-live="polite">${escapeHtml(error || statusText(state, results.length))}</p>
+        <p class="live compact-status ${error ? "error" : "muted"}" role="status" aria-live="polite">${escapeHtml(error || statusText(state, results.length))}</p>
         <div class="cards" part="results" role="list" aria-label="BeatSaver results">
           ${results.map((result) => mapResultMarkup(result)).join("") || `<p class="muted">${state === "empty" ? "No compatible maps found." : "Search or browse latest maps."}</p>`}
         </div>
         ${selected ? `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(readString(selected, "name", "Selected map"))}</h3><p class="muted">${escapeHtml(readString(selected, "songAuthorName", ""))} · mapped by ${escapeHtml(readString(selected, "levelAuthorName", "Unknown"))}</p>
-          <label>Version<select part="version-select" data-intent="beatsaver-version-select">${versions.map((version) => optionMarkup(readString(version, "versionHash", ""), readString(version, "label", readString(version, "versionHash", "Version")), selectedVersion)).join("")}</select></label>
-          <label>Difficulty<select part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select></label>
+          <label><span class="compact-field-label">Version</span><select aria-label="Version" part="version-select" data-intent="beatsaver-version-select">${versions.map((version) => optionMarkup(readString(version, "versionHash", ""), readString(version, "label", readString(version, "versionHash", "Version")), selectedVersion)).join("")}</select></label>
+          <label><span class="compact-field-label">Difficulty</span><select aria-label="Difficulty" part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select></label>
           <button part="import-button" type="button" data-intent="beatsaver-import" ${selectedVersion && selectedDifficulty ? "" : "disabled"}>Import selected map</button></section>` : ""}
       </section>`);
   }
@@ -411,7 +426,7 @@ export class AeroCapabilitiesPanel extends AeroPresenterElement {
   render() {
     const limitations = readStringList(this.presenterSnapshot, "limitations");
     const capabilities = ["camera", "fullscreen", "autoplay", "webgl2", "indexedDb", "worker", "directBeatSaverCors", "localZipImport"];
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="capabilities-heading"><h2 id="capabilities-heading">Device capabilities</h2><div class="cards">${capabilities.map((name) => `<span class="pill">${escapeHtml(titleCase(name))}: ${readBoolean(this.presenterSnapshot, name, false) ? "available" : "unavailable"}</span>`).join("")}</div>${limitations.length ? `<ul part="limitations">${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">No reported limitations.</p>`}</section>`);
+    this.renderMarkup(`<section class="panel ${limitations.length ? "" : "compact-hide-when-clear"}" part="panel" aria-labelledby="capabilities-heading"><h2 id="capabilities-heading">Device capabilities</h2><div class="cards compact-telemetry">${capabilities.map((name) => `<span class="pill">${escapeHtml(titleCase(name))}: ${readBoolean(this.presenterSnapshot, name, false) ? "available" : "unavailable"}</span>`).join("")}</div>${limitations.length ? `<ul part="limitations" aria-label="Device limitations">${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">No reported limitations.</p>`}</section>`);
   }
 }
 
@@ -458,7 +473,7 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
     const scoringReason = scoringDisabled ? (sessionState === "countdown" ? "Scoring profiles are locked during countdown." : "Pause or finish the run to change scoring profiles.") : "Scoring profile changes apply between runs.";
     const classStates = normalizeProfileClassStates(this.presenterSnapshot);
     const statusText = classStates.length === 3 ? "Visual, scoring, and converter profile state loaded." : "Profile state is incomplete.";
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="profiles-heading"><h2 id="profiles-heading">Workout prototype</h2><div class="cards" part="profiles" role="radiogroup" aria-label="Prototype presentation">${prototypeOptions.map((option) => `<button type="button" part="profile" role="radio" aria-checked="${selected === option.id}" tabindex="${selected === option.id ? "0" : "-1"}" data-intent="prototype-select" data-value="${option.id}"><strong>${escapeHtml(option.label)}</strong><span class="muted">${escapeHtml(option.rulesetId)}${option.recipeId ? ` · ${escapeHtml(option.recipeId)}` : ""}</span></button>`).join("")}</div><p class="muted live" role="status" aria-live="polite">${escapeHtml(statusText)}</p><section class="stack" part="telemetry" aria-label="Experimental profile management">${classStates.map((state) => profileClassMarkup(state, scoringDisabled, scoringReason)).join("") || `<p class="muted">No valid experimental profile state loaded.</p>`}</section><div class="row" aria-label="Profile bundle actions"><button type="button" part="import-button" data-intent="tuning-import-request" aria-label="Import experimental profile bundle">Import profiles</button><button type="button" part="export-button" data-intent="tuning-export" aria-label="Export experimental profile bundle">Export profiles</button><button type="button" part="reset-button" data-intent="tuning-reset" aria-label="Reset experimental profiles">Reset profiles</button></div></section>`);
+    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="profiles-heading"><h2 id="profiles-heading">Workout prototype</h2><div class="cards" part="profiles" role="radiogroup" aria-label="Prototype presentation">${prototypeOptions.map((option) => `<button type="button" part="profile" role="radio" aria-checked="${selected === option.id}" tabindex="${selected === option.id ? "0" : "-1"}" data-intent="prototype-select" data-value="${option.id}"><strong>${escapeHtml(option.label)}</strong><span class="muted">${escapeHtml(option.rulesetId)}${option.recipeId ? ` · ${escapeHtml(option.recipeId)}` : ""}</span></button>`).join("")}</div><p class="muted live compact-status" role="status" aria-live="polite">${escapeHtml(statusText)}</p><section class="stack" part="telemetry" aria-label="Experimental profile management">${classStates.map((state) => profileClassMarkup(state, scoringDisabled, scoringReason)).join("") || `<p class="muted">No valid experimental profile state loaded.</p>`}</section><div class="row" aria-label="Profile bundle actions"><button type="button" part="import-button" data-intent="tuning-import-request" aria-label="Import experimental profile bundle">Import profiles</button><button type="button" part="export-button" data-intent="tuning-export" aria-label="Export experimental profile bundle">Export profiles</button><button type="button" part="reset-button" data-intent="tuning-reset" aria-label="Reset experimental profiles">Reset profiles</button></div></section>`);
   }
 
   /** @param {string} type @param {HTMLElement} target */
@@ -617,10 +632,11 @@ function libraryItemMarkup(item, pendingDeletePackageId) {
   const name = readString(item, "name", "Untitled package");
   const variantCount = readNumber(item, "variantCount", 0);
   const pending = id !== "" && id === pendingDeletePackageId;
+  const accessibleName = escapeAttribute(name);
   const deleteControls = pending
-    ? `<span role="status">Delete ${escapeHtml(name)}?</span><button type="button" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm delete</button><button type="button" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
-    : `<button type="button" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
-  return `<article class="card" part="item" role="listitem"><h3>${escapeHtml(name)}</h3><p class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</p><div class="row"><button type="button" data-intent="library-select" data-value="${escapeAttribute(id)}">Play</button><button type="button" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div></article>`;
+    ? `<span role="status">Delete ${escapeHtml(name)}?</span><button type="button" aria-label="Confirm delete ${accessibleName}" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm delete</button><button type="button" aria-label="Cancel deleting ${accessibleName}" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
+    : `<button type="button" aria-label="Delete ${accessibleName}" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
+  return `<article class="card" part="item" role="listitem"><h3>${escapeHtml(name)}</h3><p class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</p><div class="row"><button type="button" aria-label="Play ${accessibleName}" data-intent="library-select" data-value="${escapeAttribute(id)}">Play</button><button type="button" aria-label="Export ${accessibleName}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div></article>`;
 }
 /** @param {number} used @param {number} quota @returns {string} */
 function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used)} stored · quota unavailable`; if (used > quota) return `${formatBytes(used)} of ${formatBytes(quota)} used · over quota`; return `${formatBytes(used)} of ${formatBytes(quota)} used (${Math.round((used / quota) * 100)}%)`; }
@@ -686,10 +702,11 @@ function profileClassMarkup(state, scoringDisabled, scoringReason) {
   const disabled = isScoring && scoringDisabled;
   const policy = state.class === "live_visual" ? "Applies immediately." : isScoring ? scoringReason : state.regenerationRequired ? "Regenerate content to apply this converter profile." : "Selected converter profile matches generated content.";
   const options = state.profiles.length ? `<div class="row" aria-label="${escapeAttribute(titleCase(state.class))} profile choices">${state.profiles.map((profile) => `<button type="button" data-intent="prototype-profile-select" data-profile-class="${escapeAttribute(profile.class)}" data-value="${escapeAttribute(profile.profileId)}" data-profile-version="${escapeAttribute(profile.profileVersion)}" data-content-hash="${escapeAttribute(profile.contentHash)}" ${disabled ? "disabled" : ""} aria-label="Select ${escapeAttribute(profile.profileId)} ${escapeAttribute(titleCase(profile.class))} profile">${escapeHtml(profile.profileId)}</button>`).join("")}</div>` : "";
-  const converterTruth = isConverter ? `<p class="muted">Selected ${escapeHtml(state.selectedContentHash)}<br>Applied ${escapeHtml(state.appliedContentHash)}<br>Pending ${escapeHtml(state.pendingContentHash ?? "none")}</p>` : "";
-  return `<article class="card" data-profile-class="${escapeAttribute(state.class)}"><div class="row"><h3>${escapeHtml(titleCase(state.class))}</h3>${state.experimental ? `<span class="pill">Experimental</span>` : ""}${state.regenerationRequired ? `<span class="pill error">Regeneration required</span>` : `<span class="pill">Applied</span>`}</div>${identityMarkup(state.active)}<p class="muted live" role="status" aria-live="polite">${escapeHtml(policy)}</p>${converterTruth}${options}</article>`;
+  const converterTruth = isConverter ? `<p class="muted compact-converter-truth" role="status" aria-live="polite">Selected ${escapeHtml(state.selectedContentHash)}<br>Applied ${escapeHtml(state.appliedContentHash)}<br>Pending ${escapeHtml(state.pendingContentHash ?? "none")}</p>` : "";
+  const policyClass = disabled ? "compact-critical" : "compact-explanatory";
+  return `<article class="card" data-profile-class="${escapeAttribute(state.class)}"><div class="row"><h3>${escapeHtml(titleCase(state.class))}</h3>${state.experimental ? `<span class="pill compact-telemetry">Experimental</span>` : ""}${state.regenerationRequired ? `<span class="pill error">Regeneration required</span>` : `<span class="pill">Applied</span>`}</div>${identityMarkup(state.active)}<p class="muted live ${policyClass}" role="status" aria-live="polite">${escapeHtml(policy)}</p>${converterTruth}${options}</article>`;
 }
 /** @param {ProfileIdentity} identity @returns {string} */
-function identityMarkup(identity) { return `<div part="profile-identity"><strong>${escapeHtml(identity.profileId)}</strong><p class="muted">Version ${escapeHtml(identity.profileVersion)} · ${escapeHtml(identity.class)}<br>Hash ${escapeHtml(identity.contentHash)}</p></div>`; }
+function identityMarkup(identity) { return `<div class="compact-identity" part="profile-identity"><strong>${escapeHtml(identity.profileId)}</strong><p class="muted">Version ${escapeHtml(identity.profileVersion)} · ${escapeHtml(identity.class)}<br>Hash ${escapeHtml(identity.contentHash)}</p></div>`; }
 /** @param {string} url @returns {boolean} */
 function isSafeVisualUrl(url) { if (url === "") return false; try { const parsed = new URL(url, document.baseURI); return parsed.protocol === "https:" || parsed.protocol === "blob:" || (parsed.protocol === "http:" && parsed.hostname === "127.0.0.1"); } catch { return false; } }

@@ -226,6 +226,35 @@ try {
     module.defineAeroUiElements();
     const idempotentDefinition = customElements.get("aero-prototype-selector") === module.AeroPrototypeSelector;
     const scalarPayloadsOnly = captured.every((intent) => Object.values(intent?.payload ?? {}).every((value) => value === null || ["string", "number", "boolean"].includes(typeof value)));
+
+    isolatedBrowser.setSnapshot({ state: "results", query: "Papercut", results: [{ mapId: "4858", name: "Papercut", songAuthorName: "Linkin Park" }], selectedMap: { mapId: "4858", name: "Papercut", songAuthorName: "Linkin Park", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current version" }], difficulties: ["Hard", "Expert"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Expert" });
+    const compactError = document.createElement("aero-error-panel");
+    compactError.setSnapshot({ code: "camera_permission_denied", message: "Camera permission is required.", retryable: true });
+    document.body.append(compactError);
+    const compactCalibration = document.querySelector("aero-calibration-badge");
+    const compactCapabilities = document.querySelector("aero-capabilities-panel");
+    if (!(compactCalibration instanceof HTMLElement) || !(compactCapabilities instanceof HTMLElement)) throw new Error("Compact fixture presenters are missing.");
+    const compactHosts = [isolatedBrowser, storage, compactCalibration, compactCapabilities, hostileSelector, firstFullscreen, compactError];
+    const defaultMarkup = compactHosts.map((host) => host.shadowRoot?.innerHTML ?? "");
+    const beforeCompactIntents = captured.length;
+    for (const host of compactHosts) Reflect.set(host, "compact", true);
+    const compactAttributeRoundtrip = compactHosts.every((host) => host.hasAttribute("compact") && Reflect.get(host, "compact") === true);
+    const compactHeadingsSuppressed = compactHosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("h1,h2,h3,.compact-converter-truth") ?? [])]).every((heading) => {
+      const style = getComputedStyle(heading);
+      const bounds = heading.getBoundingClientRect();
+      return style.position === "absolute" && bounds.width <= 1 && bounds.height <= 1;
+    });
+    const compactMetadataSuppressed = compactHosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll(".compact-identity,.compact-telemetry,.muted:not(.live):not(.compact-critical):not(.compact-converter-truth),.pill:not(.error)") ?? [])]).every((entry) => getComputedStyle(entry).display === "none");
+    const compactControls = compactHosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])]);
+    const compactControlsActionable = compactControls.every((control) => {
+      const bounds = control.getBoundingClientRect();
+      return getComputedStyle(control).display !== "none" && bounds.width >= 42 && bounds.height >= 42;
+    });
+    const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("select")?.getAttribute("aria-label") === "Version";
+    const compactCriticalVisible = getComputedStyle(compactCalibration.shadowRoot?.querySelector("[role='status']")).display !== "none" && getComputedStyle(hostileSelector.shadowRoot?.querySelector(".pill.error")).display !== "none" && getComputedStyle(compactError.shadowRoot?.querySelector(".error")).display !== "none";
+    for (const host of compactHosts) Reflect.set(host, "compact", false);
+    const compactDefaultRestored = compactHosts.every((host, index) => !host.hasAttribute("compact") && (host.shadowRoot?.innerHTML ?? "") === defaultMarkup[index]);
+    const compactToggleIntentFree = captured.length === beforeCompactIntents;
     document.removeEventListener("aero:ui:intent", capture);
     library.remove();
     returnButton.remove();
@@ -259,7 +288,15 @@ try {
       hugeStorage,
       instanceIntents,
       idempotentDefinition,
-      scalarPayloadsOnly
+      scalarPayloadsOnly,
+      compactAttributeRoundtrip,
+      compactHeadingsSuppressed,
+      compactMetadataSuppressed,
+      compactControlsActionable,
+      compactAccessibleFields,
+      compactCriticalVisible,
+      compactDefaultRestored,
+      compactToggleIntentFree
     };
   });
   assert(adversarial.arrowProfileId === "flow" && adversarial.focusedRadioId === "flow", "Arrow-key radio navigation did not wrap, select and focus the adjacent profile.");
@@ -273,6 +310,11 @@ try {
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
   assert(adversarial.idempotentDefinition && adversarial.scalarPayloadsOnly, "Definition or scalar-only event contracts failed.");
+  assert(adversarial.compactAttributeRoundtrip && adversarial.compactHeadingsSuppressed && adversarial.compactMetadataSuppressed, "Compact property/attribute did not visually suppress only designated headings and metadata.");
+  assert(adversarial.compactControlsActionable, "Compact mode hid or undersized an actionable control.");
+  assert(adversarial.compactAccessibleFields, "Compact mode removed an accessible field name.");
+  assert(adversarial.compactCriticalVisible, "Compact mode hid critical live state.");
+  assert(adversarial.compactDefaultRestored && adversarial.compactToggleIntentFree, "Compact toggling changed default DOM/state or emitted an intent.");
 
   mkdirSync("screenshots", { recursive: true });
   for (const viewport of [
@@ -337,6 +379,47 @@ try {
     const capturedHeight = screenshot.readUInt32BE(20);
     assert(evidenceBounds.pageRight <= capturedWidth && evidenceBounds.pageBottom <= capturedHeight && evidenceBounds.pageHeight <= capturedHeight, `${viewport.name} profile surface was outside the captured image.`);
     await evidencePage.close();
+  }
+  for (const viewport of [
+    { name: "phone-portrait", width: 390, height: 844 },
+    { name: "phone-landscape", width: 844, height: 390 }
+  ]) {
+    const compactPage = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, reducedMotion: "reduce" });
+    await compactPage.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
+    await compactPage.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
+    const compactBounds = await compactPage.evaluate(() => {
+      const app = document.querySelector("#app");
+      if (!(app instanceof HTMLElement)) return null;
+      const drawerNames = new Set(["AERO-BEATSAVER-BROWSER", "AERO-CONTENT-IMPORT-PROGRESS", "AERO-CONTENT-LIBRARY", "AERO-CALIBRATION-BADGE", "AERO-CAPABILITIES-PANEL", "AERO-PROTOTYPE-SELECTOR", "AERO-FULLSCREEN-BUTTON"]);
+      for (const child of [...app.children]) if (!drawerNames.has(child.tagName)) child.remove();
+      const mapBrowser = app.querySelector("aero-beatsaver-browser");
+      mapBrowser?.setSnapshot({ state: "results", query: "Papercut", results: [{ mapId: "4858", name: "Papercut", songAuthorName: "Linkin Park" }], selectedMap: { mapId: "4858", name: "Papercut", songAuthorName: "Linkin Park", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current version" }], difficulties: ["Hard", "Expert"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Expert" });
+      const selector = app.querySelector("aero-prototype-selector");
+      selector?.setSnapshot({ ...selector.presenterSnapshot, selectedProfileId: "spatial-cut", sessionState: "paused_manual" });
+      const error = document.createElement("aero-error-panel");
+      error.setSnapshot({ code: "camera_permission_denied", message: "Camera permission is required.", retryable: true });
+      app.append(error);
+      const hosts = [...app.children];
+      for (const host of hosts) Reflect.set(host, "compact", true);
+      const controls = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])]);
+      const headings = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("h1,h2,h3,.compact-converter-truth") ?? [])]);
+      const hiddenMetadata = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll(".compact-identity,.compact-telemetry,.muted:not(.live):not(.compact-critical):not(.compact-converter-truth),.pill:not(.error)") ?? [])]);
+      const bounds = app.getBoundingClientRect();
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        appRight: bounds.right,
+        compactHosts: hosts.length,
+        visibleHeadings: headings.filter((heading) => { const box = heading.getBoundingClientRect(); return box.width > 1 || box.height > 1; }).length,
+        visibleMetadata: hiddenMetadata.filter((entry) => getComputedStyle(entry).display !== "none").length,
+        controlsValid: controls.length > 0 && controls.every((control) => { const box = control.getBoundingClientRect(); return getComputedStyle(control).display !== "none" && box.width >= 42 && box.height >= 42 && box.left >= 0 && box.right <= document.documentElement.clientWidth; }),
+        criticalErrorVisible: getComputedStyle(error.shadowRoot?.querySelector(".error")).display !== "none",
+        progressVisible: hosts.filter((host) => host.shadowRoot?.querySelector("progress")).every((host) => getComputedStyle(host.shadowRoot?.querySelector("progress")).display !== "none")
+      };
+    });
+    assert(Boolean(compactBounds) && compactBounds.compactHosts === 8 && compactBounds.scrollWidth <= compactBounds.viewportWidth && compactBounds.appRight <= compactBounds.viewportWidth && compactBounds.visibleHeadings === 0 && compactBounds.visibleMetadata === 0 && compactBounds.controlsValid && compactBounds.criticalErrorVisible && compactBounds.progressVisible, `${viewport.name} compact action drawer clipped, exposed metadata, or hid critical/action state: ${JSON.stringify(compactBounds)}.`);
+    await compactPage.screenshot({ path: `screenshots/task12-ui-compact-${viewport.name}.png`, fullPage: true });
+    await compactPage.close();
   }
 } finally {
   await browser.close();
