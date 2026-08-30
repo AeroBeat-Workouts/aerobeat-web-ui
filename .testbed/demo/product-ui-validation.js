@@ -13,6 +13,7 @@ import {
   AeroGridPlayfield,
   AeroPrototypeSelector,
   AeroResumeCountdown,
+  AeroSessionActions,
   AeroTrackingPause,
   aeroUiIntentEventName,
   defineAeroUiElements
@@ -112,6 +113,24 @@ trackHud.setSnapshot({ leftAction: "Hook", rightAction: "Straight", defense: "Gu
 spatialHud.setSnapshot({ target: "Cell 6", blockedCells: [0, 1], safeCell: 10 });
 app.append(flowHud, trackHud, spatialHud);
 
+const sessionActions = document.createElement("aero-session-actions");
+if (!(sessionActions instanceof AeroSessionActions)) throw new Error("Session actions registration failed.");
+sessionActions.setSnapshot({ downloadedPlayable: false, activeAction: "", pendingAction: "" });
+app.append(sessionActions);
+const sessionMissingState = Object.freeze({
+  disabled: [...(sessionActions.shadowRoot?.querySelectorAll("button") ?? [])].every((button) => button.hasAttribute("disabled")),
+  prerequisite: sessionActions.shadowRoot?.querySelector("[role='status']")?.textContent ?? ""
+});
+for (const button of sessionActions.shadowRoot?.querySelectorAll("button") ?? []) button.click();
+const disabledSessionIntentCount = intents.filter((intent) => intent.type === "session-start" || intent.type === "session-test").length;
+sessionActions.setSnapshot({ downloadedPlayable: true, activeAction: "test", pendingAction: "test" });
+const sessionPendingState = Object.freeze({
+  disabled: [...(sessionActions.shadowRoot?.querySelectorAll("button") ?? [])].every((button) => button.hasAttribute("disabled")),
+  active: sessionActions.shadowRoot?.querySelector("button[aria-current='true']")?.textContent ?? "",
+  busy: sessionActions.shadowRoot?.querySelector("button[aria-busy='true']")?.textContent ?? ""
+});
+sessionActions.setSnapshot({ downloadedPlayable: true, activeAction: "start", pendingAction: "" });
+
 const fullscreen = document.createElement("aero-fullscreen-button");
 if (!(fullscreen instanceof AeroFullscreenButton)) throw new Error("Fullscreen registration failed.");
 app.append(fullscreen);
@@ -137,6 +156,8 @@ selector.shadowRoot?.querySelector("button[data-value='aero.visual.compact']")?.
 selector.shadowRoot?.querySelector("button[data-intent='tuning-import-request']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 selector.shadowRoot?.querySelector("button[data-intent='tuning-export']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 selector.shadowRoot?.querySelector("button[data-intent='tuning-reset']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+sessionActions.shadowRoot?.querySelector("button[data-intent='session-start']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+sessionActions.shadowRoot?.querySelector("button[data-intent='session-test']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 playfield.style.setProperty("--aero-role-receptor", "#123456");
 
 fullscreen.shadowRoot?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -169,6 +190,10 @@ window.__aeroProductUiValidation = Object.freeze({
   pauseRole: pause.shadowRoot?.querySelector("[role='alertdialog']")?.getAttribute("role") ?? "",
   countdownText: countdown.shadowRoot?.textContent ?? "",
   hudText: `${flowHud.shadowRoot?.textContent ?? ""} ${trackHud.shadowRoot?.textContent ?? ""} ${spatialHud.shadowRoot?.textContent ?? ""}`,
+  sessionMissingState,
+  disabledSessionIntentCount,
+  sessionPendingState,
+  sessionReadyButtons: [...(sessionActions.shadowRoot?.querySelectorAll("button") ?? [])].map((button) => ({ text: button.textContent ?? "", disabled: button.hasAttribute("disabled"), current: button.getAttribute("aria-current") })),
   fullscreenDisabledWhenUnsupported,
   fullscreenIntentCount: intents.filter((intent) => intent.type === "fullscreen-request").length,
   fullscreenExitIntentCount: intents.filter((intent) => intent.type === "fullscreen-exit").length,

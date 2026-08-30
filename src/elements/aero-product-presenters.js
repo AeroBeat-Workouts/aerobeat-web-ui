@@ -506,6 +506,20 @@ export class AeroBackgroundEnvironment extends AeroPresenterElement {
   }
 }
 
+/** Compact Start/Test action presenter; session orchestration remains with the host. */
+export class AeroSessionActions extends AeroPresenterElement {
+  render() {
+    const playable = readBoolean(this.presenterSnapshot, "downloadedPlayable", false);
+    const activeValue = readString(this.presenterSnapshot, "activeAction", "");
+    const pendingValue = readString(this.presenterSnapshot, "pendingAction", "");
+    const active = activeValue === "start" || activeValue === "test" ? activeValue : "";
+    const pending = pendingValue === "start" || pendingValue === "test" ? pendingValue : "";
+    const disabled = !playable || pending !== "";
+    const describedBy = playable ? "" : ' aria-describedby="session-actions-prerequisite"';
+    this.renderMarkup(`<div class="session-actions" part="actions" role="group" aria-label="Workout actions"><button part="start-button" type="button" data-intent="session-start" aria-current="${active === "start" ? "true" : "false"}" aria-busy="${pending === "start"}"${describedBy} ${disabled ? "disabled" : ""}>Start</button><button part="test-button" type="button" data-intent="session-test" aria-current="${active === "test" ? "true" : "false"}" aria-busy="${pending === "test"}"${describedBy} ${disabled ? "disabled" : ""}>Test</button></div>${playable ? "" : '<p id="session-actions-prerequisite" class="compact-critical live" role="status" aria-live="polite">Download Music first.</p>'}<style>.session-actions{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.session-actions button[aria-current="true"]{background:linear-gradient(180deg,#0a84ff,#086ccf);border-color:#fff;color:#fff}</style>`);
+  }
+}
+
 /** Child-owned fullscreen request presenter. */
 export class AeroFullscreenButton extends AeroPresenterElement {
   render() {
@@ -663,6 +677,7 @@ export const aeroProductPresenterConstructors = Object.freeze({
   [elementNames.countdown]: AeroResumeCountdown,
   [elementNames.prototypeSelector]: AeroPrototypeSelector,
   [elementNames.fullscreenButton]: AeroFullscreenButton,
+  "aero-session-actions": AeroSessionActions,
   "aero-background-environment": AeroBackgroundEnvironment,
   "aero-capabilities-panel": AeroCapabilitiesPanel,
   "aero-error-panel": AeroErrorPanel

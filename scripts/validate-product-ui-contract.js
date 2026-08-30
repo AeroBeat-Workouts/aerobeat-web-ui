@@ -20,6 +20,7 @@ const expectedNames = [
   "elementNames.countdown",
   "elementNames.prototypeSelector",
   "elementNames.fullscreenButton",
+  '"aero-session-actions"',
   '"aero-background-environment"',
   '"aero-capabilities-panel"',
   '"aero-error-panel"'
@@ -36,6 +37,9 @@ assert.ok(presenters.includes("slice(0, 50)"), "BeatSaver result rendering is no
 assert.ok(presenters.includes('name="beatsaver-map-choice"') && presenters.includes('data-intent="beatsaver-select-map"'), "BeatSaver map choices are not native scalar-intent radios.");
 assert.ok(presenters.includes('name="library-package-choice"') && presenters.includes('name="library-song-choice"') && presenters.includes('data-intent="library-select"') && presenters.includes('"selectedCollectionId"') && presenters.includes('"selectedPackageId"'), "Default package and compact song choices are not selected native scalar-intent radios.");
 for (const action of ["beatsaver-latest", "local-zip-request", "beatsaver-preview-toggle", "beatsaver-import", "library-preview-toggle", "library-difficulty-select", "library-export", "library-delete-request"]) assert.ok(presenters.includes(`data-intent="${action}"`), `Music action ${action} is missing.`);
+for (const action of ["session-start", "session-test"]) assert.ok(presenters.includes(`data-intent="${action}"`), `Session action ${action} is missing.`);
+assert.ok(presenters.includes('>Start</button>') && presenters.includes('>Test</button>') && !presenters.includes("Calibrate / Start"), "Compact session actions are not minimal Start/Test controls.");
+assert.ok(presenters.includes('"downloadedPlayable"') && presenters.includes('"activeAction"') && presenters.includes('"pendingAction"') && presenters.includes("Download Music first."), "Session action readiness/active/prerequisite truth is incomplete.");
 assert.ok(presenters.includes('part="version-select"') && presenters.includes('part="difficulty-select"') && presenters.includes('>Download</button>'), "Version/downloaded Difficulty/Download fields are missing.");
 assert.ok(presenters.includes("compactChoiceFieldMarkup") && presenters.includes("choices.length === 1") && presenters.includes("choices.length === 0"), "Compact zero/singleton/multiple choice rendering is incomplete.");
 assert.ok(presenters.includes('state:"idle"|"loading"|"playing"|"ended"|"error"') && presenters.includes("previewSnapshot"), "Bounded Preview/Stop presentation state is incomplete.");

@@ -18,6 +18,7 @@ import {
   AeroGridPlayfield,
   AeroPrototypeSelector,
   AeroResumeCountdown,
+  AeroSessionActions,
   AeroTrackingPause,
   defineAeroProductPresenters
 } from "./elements/aero-product-presenters.js";
@@ -43,6 +44,7 @@ export {
   AeroGridPlayfield,
   AeroPrototypeSelector,
   AeroResumeCountdown,
+  AeroSessionActions,
   AeroTrackingPause,
   aeroProductPresenterConstructors,
   aeroUiIntentEventName,
@@ -81,6 +83,7 @@ export const aeroUiConstructors = Object.freeze({
   aeroBoxingSpatialHud: AeroBoxingSpatialHud,
   aeroTrackingPause: AeroTrackingPause,
   aeroResumeCountdown: AeroResumeCountdown,
+  aeroSessionActions: AeroSessionActions,
   aeroBackgroundEnvironment: AeroBackgroundEnvironment,
   aeroFullscreenButton: AeroFullscreenButton,
   aeroCapabilitiesPanel: AeroCapabilitiesPanel,

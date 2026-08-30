@@ -44,6 +44,9 @@ try {
   assert(result.pauseRole === "alertdialog", "Tracking pause was not exposed as an accessible modal alert.");
   assert(result.countdownText.includes("Workout time frozen"), "Countdown did not announce frozen workout time.");
   assert(result.hudText.includes("Flow") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Flow/Track/Spatial HUD states were incomplete.");
+  assert(result.sessionMissingState.disabled === true && result.sessionMissingState.prerequisite === "Download Music first." && result.disabledSessionIntentCount === 0, "Missing downloaded Music did not truthfully gate Start/Test with a minimal prerequisite.");
+  assert(result.sessionPendingState.disabled === true && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test action truth was not exposed.");
+  assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
   assert(result.fullscreenDisabledWhenUnsupported === true, "Fullscreen unavailable state did not disable the control.");
   assert(result.fullscreenIntentCount === 2, "Disconnect/reconnect duplicated or lost fullscreen listeners.");
   assert(result.fullscreenExitIntentCount === 1, "Active fullscreen did not emit explicit exit intent.");
@@ -61,12 +64,12 @@ try {
   assert(profile?.payload.profileId === "spatial-cut", "Profile selection intent lost the stable profile ID.");
   const visualProfile = result.intents.find((intent) => intent.type === "prototype-profile-select");
   assert(visualProfile?.payload.profileClass === "live_visual" && visualProfile.payload.profileId === "aero.visual.compact" && visualProfile.payload.profileVersion === "1.0.0" && visualProfile.payload.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Visual profile intent omitted bounded scalar identity fields.");
-  for (const type of ["tuning-import-request", "tuning-export", "tuning-reset"]) assert(Object.keys(result.intents.find((intent) => intent.type === type)?.payload ?? {}).length === 0, `${type} leaked bundle data.`);
+  for (const type of ["tuning-import-request", "tuning-export", "tuning-reset", "session-start", "session-test"]) assert(Object.keys(result.intents.find((intent) => intent.type === type)?.payload ?? {}).length === 0, `${type} leaked non-scalar or host-owned data.`);
   for (const intent of result.intents) for (const value of Object.values(intent.payload)) assert(value === null || ["string", "number", "boolean"].includes(typeof value), `${intent.type} emitted a non-scalar payload value.`);
   const metrics = await page.evaluate(() => ({
     bodyWidth: document.body.scrollWidth,
     viewportWidth: document.documentElement.clientWidth,
-    unnamedControls: Array.from(document.querySelectorAll("aero-beatsaver-browser, aero-content-library, aero-prototype-selector, aero-fullscreen-button")).flatMap((host) => Array.from(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])).filter((control) => {
+    unnamedControls: Array.from(document.querySelectorAll("aero-beatsaver-browser, aero-content-library, aero-prototype-selector, aero-session-actions, aero-fullscreen-button")).flatMap((host) => Array.from(host.shadowRoot?.querySelectorAll("button,input,select") ?? [])).filter((control) => {
       const text = control.textContent?.trim() ?? "";
       const aria = control.getAttribute("aria-label") ?? "";
       const labelled = control.closest("label")?.textContent?.trim() ?? "";
