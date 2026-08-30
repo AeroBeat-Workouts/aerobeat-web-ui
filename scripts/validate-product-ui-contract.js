@@ -34,9 +34,9 @@ assert.ok(presenters.includes('"aero:ui:intent"'), "Public UI intent event is mi
 assert.ok(presenters.includes("bubbles: true, composed: true"), "UI intents are not bubbling and composed.");
 assert.ok(presenters.includes("slice(0, 50)"), "BeatSaver result rendering is not deterministically bounded.");
 assert.ok(presenters.includes('name="beatsaver-map-choice"') && presenters.includes('data-intent="beatsaver-select-map"'), "BeatSaver map choices are not native scalar-intent radios.");
-assert.ok(presenters.includes('name="library-package-choice"') && presenters.includes('data-intent="library-select"') && presenters.includes('"selectedPackageId"'), "Library package choices are not selected native scalar-intent radios.");
-for (const action of ["beatsaver-latest", "local-zip-request", "beatsaver-preview-toggle", "beatsaver-import", "library-preview-toggle", "library-export", "library-delete-request"]) assert.ok(presenters.includes(`data-intent="${action}"`), `Music action ${action} is missing.`);
-assert.ok(presenters.includes('part="version-select"') && presenters.includes('part="difficulty-select"'), "Version/Difficulty choice fields are missing.");
+assert.ok(presenters.includes('name="library-package-choice"') && presenters.includes('name="library-song-choice"') && presenters.includes('data-intent="library-select"') && presenters.includes('"selectedCollectionId"') && presenters.includes('"selectedPackageId"'), "Default package and compact song choices are not selected native scalar-intent radios.");
+for (const action of ["beatsaver-latest", "local-zip-request", "beatsaver-preview-toggle", "beatsaver-import", "library-preview-toggle", "library-difficulty-select", "library-export", "library-delete-request"]) assert.ok(presenters.includes(`data-intent="${action}"`), `Music action ${action} is missing.`);
+assert.ok(presenters.includes('part="version-select"') && presenters.includes('part="difficulty-select"') && presenters.includes('>Download</button>'), "Version/downloaded Difficulty/Download fields are missing.");
 assert.ok(presenters.includes("compactChoiceFieldMarkup") && presenters.includes("choices.length === 1") && presenters.includes("choices.length === 0"), "Compact zero/singleton/multiple choice rendering is incomplete.");
 assert.ok(presenters.includes('state:"idle"|"loading"|"playing"|"ended"|"error"') && presenters.includes("previewSnapshot"), "Bounded Preview/Stop presentation state is incomplete.");
 assert.ok(presenters.includes("getRenderSurface()"), "Grid host lacks a public renderer attachment seam.");
@@ -46,8 +46,8 @@ assert.ok(presenters.includes("handleDelegatedKeydown") && presenters.includes("
 assert.ok(presenters.includes('get compact()') && presenters.includes('set compact(value)') && presenters.includes(':host([compact])'), "Provider-neutral compact property/attribute contract is missing.");
 assert.ok(presenters.includes("compact-field-label") && presenters.includes("compact-critical") && presenters.includes("compact-identity"), "Compact accessibility/critical-state boundaries are missing.");
 assert.ok(presenters.includes('[part="storage"]') && presenters.includes('[part="items"] span[role="status"]') && presenters.includes('.choice-copy > .muted'), "Compact product-copy suppression boundaries are missing.");
-assert.ok(presenters.includes('readString(item, "songName"') && presenters.includes('readString(item, "difficulty"') && presenters.includes('part="selected-actions"'), "Compact library does not consume real authoring summaries with one selected action area.");
-assert.ok(presenters.includes("compactLibraryMarkup") && presenters.includes("compactLibraryBaseLabel") && presenters.includes("No downloaded songs."), "Compact quick-choice library states are incomplete.");
+assert.ok(presenters.includes('readRecordList(snapshot, "songs")') && presenters.includes('readBoundedString(record, "collectionId"') && presenters.includes('data-intent="library-difficulty-select"') && presenters.includes('part="selected-actions"'), "Compact library does not consume bounded collection summaries with one selected action area.");
+assert.ok(presenters.includes("compactLibraryMarkup") && presenters.includes("normalizeDownloadedSong") && presenters.includes("No downloaded songs."), "Compact downloaded-song states are incomplete.");
 assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "Calibration composition does not preserve media/render surfaces across snapshots.");
 for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
   assert.ok(presenters.includes(profileId), `Missing prototype profile ${profileId}`);

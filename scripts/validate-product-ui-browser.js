@@ -351,7 +351,7 @@ try {
       const bounds = control.getBoundingClientRect();
       return getComputedStyle(control).display !== "none" && bounds.width >= 42 && bounds.height >= 42;
     });
-    const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("output")?.getAttribute("aria-label") === "Version" && isolatedBrowser.shadowRoot?.querySelector("select")?.getAttribute("aria-label") === "Difficulty";
+    const compactAccessibleFields = isolatedBrowser.shadowRoot?.querySelector("input")?.getAttribute("aria-label") === "Search maps" && isolatedBrowser.shadowRoot?.querySelector("output")?.getAttribute("aria-label") === "Version" && isolatedBrowser.shadowRoot?.querySelector("select") === null;
     const compactCriticalVisible = getComputedStyle(compactCalibration.shadowRoot?.querySelector("[role='status']")).display !== "none" && getComputedStyle(hostileSelector.shadowRoot?.querySelector(".pill.error")).display !== "none" && getComputedStyle(compactError.shadowRoot?.querySelector(".error")).display !== "none";
     const styleSignature = (button) => { const style = getComputedStyle(button); return `${style.backgroundImage}|${style.borderColor}|${style.boxShadow}|${style.color}`; };
     const selectedGameplay = hostileSelector.shadowRoot?.querySelector("button[role='radio'][aria-checked='true']");
@@ -701,18 +701,23 @@ try {
       zeroMapBrowser.setSnapshot({ state: "results", results: [{ mapId: "zero", name: "Zero Song", songAuthorName: "Artist" }], selectedMap: { mapId: "zero", name: "Zero Song" }, versions: [], difficulties: [], selectedVersionHash: "", selectedDifficulty: "" });
       const library = document.createElement("aero-content-library");
       library.setAttribute("compact", "");
-      library.setSnapshot({ selectedPackageId: "package-beta", packages: [
-        { key: "alpha-one", packageId: "package-alpha-one", packageHash: `sha256:${"1".repeat(64)}`, songName: "Alpha Download", difficulty: "Hard", createdAtMs: 100, assetCount: 2, sourceCacheCount: 0 },
-        { key: "alpha-two", packageId: "package-alpha-two", packageHash: `sha256:${"2".repeat(64)}`, songName: "Alpha Download", difficulty: "Hard", createdAtMs: 200, assetCount: 2, sourceCacheCount: 0 },
-        { key: "beta", packageId: "package-beta", packageHash: `sha256:${"3".repeat(64)}`, songName: "Beta Download", difficulty: "Expert", createdAtMs: 300, assetCount: 2, sourceCacheCount: 0 }
-      ], usedBytes: 1024, quotaBytes: 4096 });
+      library.setSnapshot({ selectedCollectionId: "collection-beta", selectedPackageId: "package-beta", songs: [
+        { collectionId: "collection-alpha", songName: "Alpha Download", activePackageId: "package-alpha-hard", difficulties: [{ difficultyId: "Hard", label: "Hard", packageId: "package-alpha-hard" }, { difficultyId: "Expert", label: "Expert", packageId: "package-alpha-expert" }] },
+        { collectionId: "collection-beta", songName: "Beta Download", activePackageId: "package-beta", difficulties: [{ difficultyId: "Expert", label: "Expert", packageId: "package-beta" }] }
+      ], packages: [], usedBytes: 1024, quotaBytes: 4096 });
       const emptyLibrary = document.createElement("aero-content-library");
       emptyLibrary.setAttribute("compact", "");
       emptyLibrary.setSnapshot({ selectedPackageId: "missing", packages: [] });
       const oneLibrary = document.createElement("aero-content-library");
       oneLibrary.setAttribute("compact", "");
       oneLibrary.setSnapshot({ selectedPackageId: "missing", packages: [{ key: "one", packageId: "package-one", packageHash: `sha256:${"4".repeat(64)}`, songName: "Only Download", difficulty: "Normal", createdAtMs: 400, assetCount: 1, sourceCacheCount: 0 }] });
-      app.append(mapBrowser, multiMapBrowser, zeroMapBrowser, library, emptyLibrary, oneLibrary);
+      const hostileLibrary = document.createElement("aero-content-library");
+      hostileLibrary.setAttribute("compact", "");
+      let hostileGetterCalls = 0;
+      const accessorSong = { songName: "Accessor", activePackageId: "secret", difficulties: [{ difficultyId: "Hard", label: "Hard", packageId: "secret" }] };
+      Object.defineProperty(accessorSong, "collectionId", { enumerable: true, get() { hostileGetterCalls += 1; return "secret"; } });
+      hostileLibrary.setSnapshot({ songs: [accessorSong, { collectionId: "extra", songName: "Extra", activePackageId: "extra-package", difficulties: [{ difficultyId: "Hard", label: "Hard", packageId: "extra-package" }], extra: true }], packages: [{ packageId: "must-not-fallback", songName: "Hidden", difficulty: "Hard" }] });
+      app.append(mapBrowser, multiMapBrowser, zeroMapBrowser, library, emptyLibrary, oneLibrary, hostileLibrary);
       const hosts = [mapBrowser, library];
       const radios = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const buttons = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
@@ -720,12 +725,20 @@ try {
       const localLabels = [...(library.shadowRoot?.querySelectorAll(".compact-library-choice span") ?? [])].map((label) => label.textContent?.trim() ?? "");
       const localActions = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])];
       const initialCheckedValues = hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? "");
+      const initialLocalDifficulty = library.shadowRoot?.querySelector("output")?.textContent?.trim() ?? "";
       const captured = [];
       mapBrowser.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
+      multiMapBrowser.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
       library.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) captured.push(event.detail); });
+      const remoteVersionSelect = multiMapBrowser.shadowRoot?.querySelector("select[data-intent='beatsaver-version-select']");
+      const beforeRemoteSelectClick = captured.length;
+      remoteVersionSelect?.click();
+      const remoteSelectClickStable = captured.length === beforeRemoteSelectClick && remoteVersionSelect === multiMapBrowser.shadowRoot?.querySelector("select[data-intent='beatsaver-version-select']");
       mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-preview-toggle']")?.click();
+      mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-import']")?.click();
       library.shadowRoot?.querySelector("button[data-intent='library-preview-toggle']")?.click();
       const remotePreviewIntent = captured.find((intent) => intent?.type === "beatsaver-preview-toggle")?.payload;
+      const remoteDownloadIntent = captured.find((intent) => intent?.type === "beatsaver-import")?.payload;
       const localPreviewIntent = captured.find((intent) => intent?.type === "library-preview-toggle")?.payload;
       mapBrowser.setSnapshot({ ...mapBrowser.presenterSnapshot, preview: { state: "playing", mapId: "beta", versionHash: "a".repeat(40), packageId: "", errorMessage: "" } });
       library.setSnapshot({ ...library.presenterSnapshot, preview: { state: "loading", mapId: "", versionHash: "", packageId: "package-beta", errorMessage: "" } });
@@ -736,11 +749,18 @@ try {
       const remoteEnded = mapBrowser.shadowRoot?.querySelector("button[data-intent='beatsaver-preview-toggle']")?.textContent?.trim() ?? "";
       const localErrorLabel = library.shadowRoot?.querySelector("button[data-intent='library-preview-toggle']")?.textContent?.trim() ?? "";
       const localError = library.shadowRoot?.querySelector(".compact-library-actions [role='status'].error")?.textContent?.trim() ?? "";
-      const secondDuplicate = library.shadowRoot?.querySelector("input[value='package-alpha-two']");
-      secondDuplicate?.focus();
-      secondDuplicate?.click();
-      const switched = captured.findLast((intent) => intent?.type === "library-select")?.payload?.packageId ?? "";
-      const switchedActionIds = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.value ?? "");
+      const alphaSong = library.shadowRoot?.querySelector("input[value='collection-alpha']");
+      alphaSong?.focus();
+      alphaSong?.click();
+      const previewBleedAfterSongSwitch = Boolean(library.shadowRoot?.querySelector(".compact-library-actions [role='status'].error"));
+      const switchedCollection = captured.findLast((intent) => intent?.type === "library-select")?.payload?.collectionId ?? "";
+      const difficultySelect = library.shadowRoot?.querySelector("select[data-intent='library-difficulty-select']");
+      const beforeDifficultyClick = captured.length;
+      difficultySelect?.click();
+      const difficultyClickStable = captured.length === beforeDifficultyClick && difficultySelect === library.shadowRoot?.querySelector("select[data-intent='library-difficulty-select']");
+      if (difficultySelect instanceof HTMLSelectElement) { difficultySelect.value = "package-alpha-expert"; difficultySelect.dispatchEvent(new Event("change", { bubbles: true, composed: true })); }
+      const difficultyIntent = captured.findLast((intent) => intent?.type === "library-difficulty-select")?.payload;
+      const switchedActionIds = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button[data-intent='library-preview-toggle'],.compact-library-actions button[data-intent='library-export']") ?? [])].map((button) => button.dataset.value ?? "");
       library.shadowRoot?.querySelector("button[data-intent='library-delete-request']")?.click();
       const compactDeleteIntents = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.intent ?? "");
       const compactDeleteIds = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])].map((button) => button.dataset.value ?? "");
@@ -753,6 +773,7 @@ try {
         localLabels,
         checked: hosts.map((host) => host.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0),
         checkedValues: initialCheckedValues,
+        initialLocalDifficulty,
         actionButtons: buttons.length,
         localActionIntents: localActions.map((button) => button.dataset.intent ?? ""),
         localActionIds: localActions.map((button) => button.dataset.value ?? ""),
@@ -763,6 +784,8 @@ try {
         zeroErrors: zeroMapBrowser.shadowRoot?.querySelectorAll("[role='status'].error").length ?? -1,
         zeroDisabledActions: [...(zeroMapBrowser.shadowRoot?.querySelectorAll("button[data-intent='beatsaver-preview-toggle'],button[data-intent='beatsaver-import']") ?? [])].every((button) => button.hasAttribute("disabled")),
         remotePreviewIntent,
+        remoteDownloadIntent,
+        remoteSelectClickStable,
         localPreviewIntent,
         remoteStop,
         localStop,
@@ -770,7 +793,10 @@ try {
         localErrorLabel,
         localError,
         noPlay: ![...buttons].some((button) => button.textContent?.trim() === "Play"),
-        switched,
+        switchedCollection,
+        previewBleedAfterSongSwitch,
+        difficultyClickStable,
+        difficultyIntent,
         switchedActionIds,
         compactDeleteIntents,
         compactDeleteIds,
@@ -781,6 +807,9 @@ try {
         emptyText: emptyLibrary.shadowRoot?.textContent ?? "",
         oneChecked: oneLibrary.shadowRoot?.querySelector("input:checked")?.value ?? "",
         oneActions: [...(oneLibrary.shadowRoot?.querySelectorAll("button") ?? [])].map((button) => button.dataset.intent ?? ""),
+        hostileGetterCalls,
+        hostileRadios: hostileLibrary.shadowRoot?.querySelectorAll("input[type='radio']").length ?? -1,
+        hostileText: hostileLibrary.shadowRoot?.textContent ?? "",
         selects: selects.length,
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         controlsVisible: currentControls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.display !== "none"; })
@@ -789,9 +818,10 @@ try {
       zeroMapBrowser.remove();
       emptyLibrary.remove();
       oneLibrary.remove();
+      hostileLibrary.remove();
       return result;
     });
-    assert(Boolean(musicEvidence) && musicEvidence.mapLabels.join("|") === "Alpha Song|Beta Song" && musicEvidence.localLabels.join("|") === "Alpha Download · Hard · 1|Alpha Download · Hard · 2|Beta Download · Expert" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,package-beta" && musicEvidence.actionButtons === 8 && musicEvidence.localActionIntents.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.localActionIds.every((id) => id === "package-beta") && musicEvidence.selectedActionAreas === 1 && musicEvidence.singletonOutputs.join("|") === "Version:Current|Difficulty:Hard" && musicEvidence.singletonSelects === 0 && musicEvidence.multiSelects === 2 && musicEvidence.zeroErrors === 2 && musicEvidence.zeroDisabledActions && musicEvidence.remotePreviewIntent?.mapId === "beta" && musicEvidence.remotePreviewIntent?.versionHash === "a".repeat(40) && Object.keys(musicEvidence.remotePreviewIntent).length === 2 && musicEvidence.localPreviewIntent?.packageId === "package-beta" && Object.keys(musicEvidence.localPreviewIntent).length === 1 && musicEvidence.remoteStop === "Stop" && musicEvidence.localStop === "Stop" && musicEvidence.remoteEnded === "Preview" && musicEvidence.localErrorLabel === "Preview" && musicEvidence.localError === "Preview unavailable." && musicEvidence.noPlay && musicEvidence.switched === "package-alpha-two" && musicEvidence.switchedActionIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeleteIntents.join(",") === "library-preview-toggle,library-export,library-delete,library-delete-cancel" && musicEvidence.compactDeleteIds.every((id) => id === "package-alpha-two") && musicEvidence.compactDeletePrompt === "Delete Alpha Download · Hard · 2?" && musicEvidence.compactDeleteCancelled === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.emptyRadios === 0 && musicEvidence.emptyActions === 0 && musicEvidence.emptyText.includes("No downloaded songs") && musicEvidence.oneChecked === "package-one" && musicEvidence.oneActions.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.selects === 0 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
+    assert(Boolean(musicEvidence) && musicEvidence.mapLabels.join("|") === "Alpha Song|Beta Song" && musicEvidence.localLabels.join("|") === "Alpha Download|Beta Download" && musicEvidence.checked.join(",") === "1,1" && musicEvidence.checkedValues.join(",") === "beta,collection-beta" && musicEvidence.actionButtons === 8 && musicEvidence.localActionIntents.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.localActionIds.join(",") === "package-beta,package-beta,collection-beta" && musicEvidence.selectedActionAreas === 1 && musicEvidence.singletonOutputs.join("|") === "Version:Current" && musicEvidence.initialLocalDifficulty === "Expert" && musicEvidence.singletonSelects === 0 && musicEvidence.multiSelects === 1 && musicEvidence.zeroErrors === 1 && musicEvidence.zeroDisabledActions && musicEvidence.remotePreviewIntent?.mapId === "beta" && musicEvidence.remotePreviewIntent?.versionHash === "a".repeat(40) && Object.keys(musicEvidence.remotePreviewIntent).length === 2 && musicEvidence.remoteDownloadIntent?.mapId === "beta" && musicEvidence.remoteDownloadIntent?.versionHash === "a".repeat(40) && Object.keys(musicEvidence.remoteDownloadIntent).length === 2 && musicEvidence.remoteSelectClickStable && musicEvidence.localPreviewIntent?.packageId === "package-beta" && Object.keys(musicEvidence.localPreviewIntent).length === 1 && musicEvidence.remoteStop === "Stop" && musicEvidence.localStop === "Stop" && musicEvidence.remoteEnded === "Preview" && musicEvidence.localErrorLabel === "Preview" && musicEvidence.localError === "Preview unavailable." && musicEvidence.noPlay && musicEvidence.switchedCollection === "collection-alpha" && !musicEvidence.previewBleedAfterSongSwitch && musicEvidence.difficultyClickStable && musicEvidence.difficultyIntent?.collectionId === "collection-alpha" && musicEvidence.difficultyIntent?.packageId === "package-alpha-expert" && Object.keys(musicEvidence.difficultyIntent).length === 2 && musicEvidence.switchedActionIds.every((id) => id === "package-alpha-expert") && musicEvidence.compactDeleteIntents.join(",") === "library-preview-toggle,library-export,library-delete,library-delete-cancel" && musicEvidence.compactDeleteIds.join(",") === "package-alpha-expert,package-alpha-expert,collection-alpha,collection-alpha" && musicEvidence.compactDeletePrompt === "Delete Alpha Download?" && musicEvidence.compactDeleteCancelled === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.emptyRadios === 0 && musicEvidence.emptyActions === 0 && musicEvidence.emptyText.includes("No downloaded songs") && musicEvidence.oneChecked === "package-one" && musicEvidence.oneActions.join(",") === "library-preview-toggle,library-export,library-delete-request" && musicEvidence.hostileGetterCalls === 0 && musicEvidence.hostileRadios === 0 && !musicEvidence.hostileText.includes("Hidden") && !musicEvidence.hostileText.includes("Extra") && musicEvidence.selects === 0 && !musicEvidence.overflow && musicEvidence.controlsVisible, `${viewport.name} populated Music radio evidence failed: ${JSON.stringify(musicEvidence)}.`);
     await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
     await musicPage.close();
   }
@@ -819,7 +849,7 @@ try {
       const importProgress = document.createElement("aero-content-import-progress");
       importProgress.setSnapshot({ state: "converting", progress: 0.63, jobId: "hidden-job-id" });
       const library = document.createElement("aero-content-library");
-      library.setSnapshot({ selectedPackageId: "hidden-package-beta", usedBytes: 123456, quotaBytes: 999999, packages: [{ packageId: "hidden-package-alpha", name: "Alpha Package", variantCount: 2 }, { packageId: "hidden-package-beta", name: "Beta Package", variantCount: 3 }] });
+      library.setSnapshot({ selectedPackageId: "hidden-package-beta", usedBytes: 123456, quotaBytes: 999999, packages: [{ packageId: "hidden-package-alpha", name: "Alpha Package", songName: "Alpha Package", difficulty: "Hard", variantCount: 2 }, { packageId: "hidden-package-beta", name: "Beta Package", songName: "Beta Package", difficulty: "Expert", variantCount: 3 }] });
       const capabilities = document.createElement("aero-capabilities-panel");
       capabilities.setSnapshot({ camera: false, fullscreen: true, autoplay: true, webgl2: true, indexedDb: true, worker: true, directBeatSaverCors: true, localZipImport: true, limitations: ["Camera permission blocks play."] });
       const error = document.createElement("aero-error-panel");
@@ -875,10 +905,10 @@ try {
     const expectedVisible = {
       gameplay: ["Flow", "Semantic Row", "Spatial Row", "Semantic Cut", "Spatial Cut"],
       visuals: ["Default", "Compact"],
-      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Difficulty", "Hard", "Import selected map"],
+      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],
       importProgress: ["Converting · 63%", "Cancel import"],
-      library: ["Alpha Package", "Beta Package", "Preview", "Export", "Delete"],
+      library: ["Alpha Package", "Beta Package", "Preview", "Difficulty", "Expert", "Export", "Delete"],
       capabilities: ["Camera permission blocks play."],
       error: ["Camera permission is required.", "Try again"],
       fullscreen: ["Enter fullscreen"]

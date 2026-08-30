@@ -225,7 +225,7 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
   /** Map radios commit on `change`; action buttons retain the inherited click path. @param {Event} event */
   handleDelegatedClick(event) {
     const target = event.composedPath()[0];
-    if (target instanceof HTMLInputElement && target.type === "radio") return;
+    if ((target instanceof HTMLInputElement && target.type === "radio") || target instanceof HTMLSelectElement) return;
     super.handleDelegatedClick(event);
   }
 
@@ -258,10 +258,11 @@ export class AeroBeatSaverBrowser extends AeroPresenterElement {
     }
     if (type === "beatsaver-import") {
       const versionSelect = this.shadowRoot?.querySelector("select[data-intent='beatsaver-version-select']");
+      const selectedVersionHash = versionSelect instanceof HTMLSelectElement ? versionSelect.value : versionHash;
       const difficultySelect = this.shadowRoot?.querySelector("select[data-intent='beatsaver-difficulty-select']");
-      this.emitIntent(type, {
+      this.emitIntent(type, this.compact ? { mapId, versionHash: selectedVersionHash } : {
         mapId,
-        versionHash: versionSelect instanceof HTMLSelectElement ? versionSelect.value : versionHash,
+        versionHash: selectedVersionHash,
         difficultyId: difficultySelect instanceof HTMLSelectElement ? difficultySelect.value : difficultyId
       });
       return;
@@ -291,12 +292,14 @@ export class AeroContentLibrary extends AeroPresenterElement {
 
   constructor() {
     super();
-    this.pendingDeletePackageId = "";
+    this.pendingDeleteCollectionId = "";
+    this.pendingSelectedCollectionId = "";
     this.pendingSelectedPackageId = "";
   }
 
-  /** A host snapshot settles any optimistic compact radio selection. @param {AeroPresenterSnapshot} snapshot */
+  /** A host snapshot settles any optimistic compact song/difficulty selection. @param {AeroPresenterSnapshot} snapshot */
   setSnapshot(snapshot) {
+    this.pendingSelectedCollectionId = "";
     this.pendingSelectedPackageId = "";
     super.setSnapshot(snapshot);
   }
@@ -315,40 +318,53 @@ export class AeroContentLibrary extends AeroPresenterElement {
     const selectedPackageId = this.pendingSelectedPackageId && packages.some((item) => readString(item, "packageId", "") === this.pendingSelectedPackageId) ? this.pendingSelectedPackageId : snapshotSelectedPackageId;
     const selectedPackageIndex = packages.findIndex((item) => readString(item, "packageId", "") === selectedPackageId);
     const checkedPackageIndex = packages.length ? Math.max(0, selectedPackageIndex) : -1;
-    if (this.pendingDeletePackageId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeletePackageId)) this.pendingDeletePackageId = "";
     if (this.compact) {
-      this.renderMarkup(compactLibraryMarkup(packages, checkedPackageIndex, this.pendingDeletePackageId, error, previewSnapshot(this.presenterSnapshot)));
+      const songs = compactDownloadedSongs(this.presenterSnapshot, packages);
+      const selectedCollectionId = compactSelectedCollectionId(this.presenterSnapshot, songs, this.pendingSelectedCollectionId, this.pendingSelectedPackageId);
+      if (this.pendingDeleteCollectionId && !songs.some((song) => song.collectionId === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
+      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot)));
       return;
     }
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards choice-radios" part="items" role="radiogroup" aria-label="Available library packages">${packages.map((item, index) => libraryItemMarkup(item, this.pendingDeletePackageId, index === checkedPackageIndex)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
+    if (this.pendingDeleteCollectionId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
+    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">My AeroBeat library</h2><p class="muted" part="storage">${escapeHtml(formatStorage(used, quota))}</p>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="cards choice-radios" part="items" role="radiogroup" aria-label="Available library packages">${packages.map((item, index) => libraryItemMarkup(item, this.pendingDeleteCollectionId, index === checkedPackageIndex)).join("") || `<p class="muted">No locally authored packages yet.</p>`}</div></section>`);
   }
 
   /** Package radios commit on `change`; package actions retain the inherited click path. @param {Event} event */
   handleDelegatedClick(event) {
     const target = event.composedPath()[0];
-    if (target instanceof HTMLInputElement && target.type === "radio") return;
+    if ((target instanceof HTMLInputElement && target.type === "radio") || target instanceof HTMLSelectElement) return;
     super.handleDelegatedClick(event);
   }
 
   /** @param {string} type @param {HTMLElement} target */
   onIntent(type, target) {
-    const packageId = target.dataset.value ?? "";
+    const value = target.dataset.value ?? (target instanceof HTMLSelectElement ? target.value : "");
     if (type === "library-select") {
-      this.emitIntent(type, { packageId });
-      if (this.compact) {
-        this.pendingSelectedPackageId = packageId;
-        this.pendingDeletePackageId = "";
-        this.render();
-        queueMicrotask(() => [...(this.shadowRoot?.querySelectorAll("input[name='library-package-choice']") ?? [])].find((input) => input instanceof HTMLInputElement && input.value === packageId)?.focus());
-      }
+      if (!this.compact) { this.emitIntent(type, { packageId: value }); return; }
+      this.emitIntent(type, { collectionId: value });
+      this.pendingSelectedCollectionId = value;
+      this.pendingSelectedPackageId = "";
+      this.pendingDeleteCollectionId = "";
+      this.render();
+      queueMicrotask(() => [...(this.shadowRoot?.querySelectorAll("input[name='library-song-choice']") ?? [])].find((input) => input instanceof HTMLInputElement && input.value === value)?.focus());
       return;
     }
-    if (type === "library-preview-toggle") {
-      this.emitIntent(type, { packageId });
+    if (type === "library-difficulty-select") {
+      const packageId = target instanceof HTMLSelectElement ? target.value : "";
+      const collectionId = target.dataset.collectionId ?? "";
+      this.emitIntent(type, { collectionId, packageId });
+      this.pendingSelectedCollectionId = collectionId;
+      this.pendingSelectedPackageId = packageId;
+      this.pendingDeleteCollectionId = "";
+      this.render();
+      return;
+    }
+    if (type === "library-preview-toggle" || type === "library-export") {
+      this.emitIntent(type, { packageId: value });
       return;
     }
     if (type === "library-delete-request") {
-      this.pendingDeletePackageId = packageId;
+      this.pendingDeleteCollectionId = value;
       this.render();
       queueMicrotask(() => {
         const confirm = this.shadowRoot?.querySelector("button[data-intent='library-delete']");
@@ -357,17 +373,17 @@ export class AeroContentLibrary extends AeroPresenterElement {
       return;
     }
     if (type === "library-delete-cancel") {
-      this.pendingDeletePackageId = "";
+      this.pendingDeleteCollectionId = "";
       this.render();
       return;
     }
     if (type === "library-delete") {
-      this.pendingDeletePackageId = "";
-      this.emitIntent(type, { packageId });
+      this.pendingDeleteCollectionId = "";
+      this.emitIntent(type, this.compact ? { collectionId: value } : { packageId: value });
       this.render();
       return;
     }
-    this.emitIntent(type, { packageId });
+    this.emitIntent(type, { packageId: value });
   }
 }
 
@@ -753,21 +769,18 @@ function defaultBeatSaverDetailMarkup(selected, versions, difficulties, selected
           <button part="import-button" type="button" data-intent="beatsaver-import" ${selectedVersion && selectedDifficulty ? "" : "disabled"}>Import selected map</button></section>`;
 }
 
-/** Compact selected-map markup exposes preview and only real choices as select controls. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versionRecords @param {readonly string[]} difficultyValues @param {string} selectedVersion @param {string} selectedDifficulty @param {PreviewSnapshot} preview @returns {string} */
-function compactBeatSaverDetailMarkup(selected, versionRecords, difficultyValues, selectedVersion, selectedDifficulty, preview) {
+/** Compact selected-map markup exposes version-level Preview and Download only. Difficulty belongs to downloaded songs. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versionRecords @param {readonly string[]} _difficultyValues @param {string} selectedVersion @param {string} _selectedDifficulty @param {PreviewSnapshot} preview @returns {string} */
+function compactBeatSaverDetailMarkup(selected, versionRecords, _difficultyValues, selectedVersion, _selectedDifficulty, preview) {
   const mapId = readBoundedString(selected, "mapId", "", 256);
   const mapName = readBoundedString(selected, "name", "Selected map", 256);
-  const versions = versionRecords.filter((version) => readBoundedString(version, "versionHash", "", 256) !== "");
-  const difficulties = difficultyValues.filter((difficulty) => difficulty.length > 0).map((difficulty) => difficulty.slice(0, 128));
+  const versions = versionRecords.filter((version) => readBoundedString(version, "versionHash", "", 256) !== "").slice(0, 32);
   const effectiveVersion = versions.some((version) => readString(version, "versionHash", "") === selectedVersion) ? selectedVersion : readString(versions[0] ?? {}, "versionHash", "");
-  const effectiveDifficulty = difficulties.includes(selectedDifficulty) ? selectedDifficulty : difficulties[0] ?? "";
   const exactPreview = preview.mapId === mapId && preview.versionHash === effectiveVersion;
   const previewActive = exactPreview && (preview.state === "loading" || preview.state === "playing");
   const previewError = exactPreview && preview.state === "error" ? preview.errorMessage : "";
   const previewLabel = previewActive ? "Stop" : "Preview";
-  const versionField = compactChoiceFieldMarkup("Version", "version-select", "beatsaver-version-select", versions.map((version) => ({ value: readString(version, "versionHash", ""), label: readString(version, "label", readString(version, "versionHash", "Version")) })), effectiveVersion);
-  const difficultyField = compactChoiceFieldMarkup("Difficulty", "difficulty-select", "beatsaver-difficulty-select", difficulties.map((difficulty) => ({ value: difficulty, label: difficulty })), effectiveDifficulty);
-  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(mapName)}</h3><button class="compact-preview-action" part="preview-button" type="button" data-intent="beatsaver-preview-toggle" aria-label="${previewLabel} ${escapeAttribute(mapName)}" aria-pressed="${previewActive}" aria-busy="${preview.state === "loading" && exactPreview}" ${effectiveVersion ? "" : "disabled"}>${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${versionField}${difficultyField}<button part="import-button" type="button" data-intent="beatsaver-import" ${effectiveVersion && effectiveDifficulty ? "" : "disabled"}>Import selected map</button></section>`;
+  const versionField = compactChoiceFieldMarkup("Version", "version-select", "beatsaver-version-select", versions.map((version) => ({ value: readBoundedString(version, "versionHash", "", 256), label: readBoundedString(version, "label", readBoundedString(version, "versionHash", "Version", 256), 256) })), effectiveVersion);
+  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(mapName)}</h3><button class="compact-preview-action" part="preview-button" type="button" data-intent="beatsaver-preview-toggle" aria-label="${previewLabel} ${escapeAttribute(mapName)}" aria-pressed="${previewActive}" aria-busy="${preview.state === "loading" && exactPreview}" ${effectiveVersion ? "" : "disabled"}>${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${versionField}<button part="import-button" type="button" data-intent="beatsaver-import" ${effectiveVersion ? "" : "disabled"}>Download</button></section>`;
 }
 
 /** @typedef {Readonly<{value:string,label:string}>} CompactChoice */
@@ -789,48 +802,94 @@ function previewSnapshot(snapshot) {
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @param {string} fallback @param {number} maximumLength @returns {string} */
 function readBoundedString(record, key, fallback, maximumLength) { return readString(record, key, fallback).slice(0, maximumLength); }
 
-/** Compact quick-choice library using the real persistence-summary shape. @param {readonly Readonly<Record<string, unknown>>[]} packages @param {number} checkedIndex @param {string} pendingDeletePackageId @param {string} error @param {PreviewSnapshot} preview @returns {string} */
-function compactLibraryMarkup(packages, checkedIndex, pendingDeletePackageId, error, preview) {
-  const usable = packages.map((item, sourceIndex) => ({ item, sourceIndex, id: readString(item, "packageId", ""), base: compactLibraryBaseLabel(item) })).filter((entry) => entry.id !== "");
-  const checked = usable.findIndex((entry) => entry.sourceIndex === checkedIndex);
-  const checkedUsableIndex = usable.length ? Math.max(0, checked) : -1;
+/** @typedef {Readonly<{difficultyId:string,label:string,packageId:string}>} CompactDownloadedDifficulty */
+/** @typedef {Readonly<{collectionId:string,songName:string,activePackageId:string,difficulties:readonly CompactDownloadedDifficulty[]}>} CompactDownloadedSong */
+
+/** Read exact bounded collection summaries, or adapt old package summaries into singleton songs. @param {AeroPresenterSnapshot} snapshot @param {readonly Readonly<Record<string, unknown>>[]} packages @returns {readonly CompactDownloadedSong[]} */
+function compactDownloadedSongs(snapshot, packages) {
+  const hasCollections = Array.isArray(snapshot.songs);
+  if (hasCollections) return Object.freeze(readRecordList(snapshot, "songs").slice(0, 100).map(normalizeDownloadedSong).filter((song) => song !== null));
+  return Object.freeze(packages.slice(0, 100).map((item) => {
+    const packageId = readBoundedString(item, "packageId", "", 1024);
+    if (!packageId) return null;
+    const difficulty = readBoundedString(item, "difficulty", "Downloaded", 128);
+    return Object.freeze({ collectionId: packageId, songName: readBoundedString(item, "songName", readBoundedString(item, "name", "Downloaded song", 256), 256), activePackageId: packageId, difficulties: Object.freeze([Object.freeze({ difficultyId: difficulty, label: difficulty, packageId })]) });
+  }).filter((song) => song !== null));
+}
+
+/** @param {Readonly<Record<string, unknown>>} record @returns {CompactDownloadedSong | null} */
+function normalizeDownloadedSong(record) {
+  if (!hasExactKeys(record, ["collectionId", "songName", "activePackageId", "difficulties"])) return null;
+  const collectionId = readBoundedString(record, "collectionId", "", 1024);
+  const songName = readBoundedString(record, "songName", "", 256);
+  const rawDifficulties = readRecordList(record, "difficulties");
+  if (!collectionId || !songName || rawDifficulties.length === 0 || rawDifficulties.length > 8) return null;
+  /** @type {CompactDownloadedDifficulty[]} */
+  const difficulties = [];
+  const packageIds = new Set();
+  const difficultyIds = new Set();
+  for (const difficulty of rawDifficulties) {
+    if (!hasExactKeys(difficulty, ["difficultyId", "label", "packageId"])) return null;
+    const difficultyId = readBoundedString(difficulty, "difficultyId", "", 128);
+    const label = readBoundedString(difficulty, "label", "", 128);
+    const packageId = readBoundedString(difficulty, "packageId", "", 1024);
+    if (!difficultyId || !label || !packageId || packageIds.has(packageId) || difficultyIds.has(difficultyId)) return null;
+    packageIds.add(packageId); difficultyIds.add(difficultyId);
+    difficulties.push(Object.freeze({ difficultyId, label, packageId }));
+  }
+  const declaredActive = readBoundedString(record, "activePackageId", "", 1024);
+  const activePackageId = packageIds.has(declaredActive) ? declaredActive : difficulties[0].packageId;
+  return Object.freeze({ collectionId, songName, activePackageId, difficulties: Object.freeze(difficulties) });
+}
+
+/** @param {AeroPresenterSnapshot} snapshot @param {readonly CompactDownloadedSong[]} songs @param {string} pendingCollectionId @param {string} pendingPackageId @returns {string} */
+function compactSelectedCollectionId(snapshot, songs, pendingCollectionId, pendingPackageId) {
+  if (songs.some((song) => song.collectionId === pendingCollectionId)) return pendingCollectionId;
+  const selectedCollectionId = readBoundedString(snapshot, "selectedCollectionId", "", 1024);
+  if (songs.some((song) => song.collectionId === selectedCollectionId)) return selectedCollectionId;
+  const selectedPackageId = pendingPackageId || readBoundedString(snapshot, "selectedPackageId", "", 1024);
+  return songs.find((song) => song.difficulties.some((difficulty) => difficulty.packageId === selectedPackageId))?.collectionId ?? songs[0]?.collectionId ?? "";
+}
+
+/** @param {readonly CompactDownloadedSong[]} songs @param {string} selectedCollectionId @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} error @param {PreviewSnapshot} preview @returns {string} */
+function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview) {
+  const selectedIndex = songs.findIndex((song) => song.collectionId === selectedCollectionId);
+  const checkedIndex = songs.length ? Math.max(0, selectedIndex) : -1;
   const totals = new Map();
-  for (const entry of usable) totals.set(entry.base, (totals.get(entry.base) ?? 0) + 1);
+  for (const song of songs) totals.set(song.songName, (totals.get(song.songName) ?? 0) + 1);
   const positions = new Map();
   /** @type {string[]} */
   const labels = [];
-  const choices = usable.map((entry, index) => {
-    const position = (positions.get(entry.base) ?? 0) + 1;
-    positions.set(entry.base, position);
-    const label = (totals.get(entry.base) ?? 0) > 1 ? `${entry.base} · ${position}` : entry.base;
+  const choices = songs.map((song, index) => {
+    const position = (positions.get(song.songName) ?? 0) + 1;
+    positions.set(song.songName, position);
+    const label = (totals.get(song.songName) ?? 0) > 1 ? `${song.songName} · ${position}` : song.songName;
     labels[index] = label;
-    return `<label class="compact-library-choice" part="item"><input type="radio" name="library-package-choice" value="${escapeAttribute(entry.id)}" data-intent="library-select" data-value="${escapeAttribute(entry.id)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedUsableIndex ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
+    return `<label class="compact-library-choice" part="item"><input type="radio" name="library-song-choice" value="${escapeAttribute(song.collectionId)}" data-intent="library-select" data-value="${escapeAttribute(song.collectionId)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedIndex ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
   }).join("");
-  const selected = checkedUsableIndex >= 0 ? usable[checkedUsableIndex] : null;
-  const actions = selected ? compactLibraryActions(selected.item, pendingDeletePackageId, labels[checkedUsableIndex] ?? selected.base, preview) : "";
+  const selected = checkedIndex >= 0 ? songs[checkedIndex] : null;
+  const actions = selected ? compactLibraryActions(selected, pendingPackageId, pendingDeleteCollectionId, labels[checkedIndex] ?? selected.songName, preview) : "";
   return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}</section>`;
 }
 
-/** @param {Readonly<Record<string, unknown>>} item @returns {string} */
-function compactLibraryBaseLabel(item) {
-  const songName = readString(item, "songName", readString(item, "name", "Downloaded song"));
-  const difficulty = readString(item, "difficulty", "");
-  return difficulty ? `${songName} · ${difficulty}` : songName;
-}
-
-/** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {string} label @param {PreviewSnapshot} preview @returns {string} */
-function compactLibraryActions(item, pendingDeletePackageId, label, preview) {
-  const id = readString(item, "packageId", "");
+/** @param {CompactDownloadedSong} song @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} label @param {PreviewSnapshot} preview @returns {string} */
+function compactLibraryActions(song, pendingPackageId, pendingDeleteCollectionId, label, preview) {
+  const selectedPackageId = song.difficulties.some((difficulty) => difficulty.packageId === pendingPackageId) ? pendingPackageId : song.activePackageId;
   const accessibleLabel = escapeAttribute(label);
-  const pending = id !== "" && id === pendingDeletePackageId;
-  const exactPreview = preview.packageId === id;
+  const pendingDelete = song.collectionId === pendingDeleteCollectionId;
+  const exactPreview = preview.packageId === selectedPackageId;
   const previewActive = exactPreview && (preview.state === "loading" || preview.state === "playing");
   const previewLabel = previewActive ? "Stop" : "Preview";
   const previewError = exactPreview && preview.state === "error" ? preview.errorMessage : "";
-  const deleteControls = pending
-    ? `<span role="status">Delete ${escapeHtml(label)}?</span><button type="button" aria-label="Confirm delete ${accessibleLabel}" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm</button><button type="button" aria-label="Cancel deleting ${accessibleLabel}" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
-    : `<button type="button" aria-label="Delete ${accessibleLabel}" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
-  return `<div class="row compact-library-actions" part="selected-actions" aria-label="Selected song actions"><button class="compact-preview-action" part="preview-button" type="button" aria-label="${previewLabel} ${accessibleLabel}" aria-pressed="${previewActive}" aria-busy="${exactPreview && preview.state === "loading"}" data-intent="library-preview-toggle" data-value="${escapeAttribute(id)}">${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}<button type="button" aria-label="Export ${accessibleLabel}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div>`;
+  const difficulty = song.difficulties.find((entry) => entry.packageId === selectedPackageId) ?? song.difficulties[0];
+  const difficultyLabel = `Difficulty for ${label}`;
+  const difficultyField = song.difficulties.length === 1
+    ? `<div class="compact-singleton-field" part="difficulty-select"><span>Difficulty</span><output aria-label="${escapeAttribute(difficultyLabel)}">${escapeHtml(difficulty.label)}</output></div>`
+    : `<label><span class="compact-field-label">Difficulty</span><select aria-label="${escapeAttribute(difficultyLabel)}" part="difficulty-select" data-intent="library-difficulty-select" data-collection-id="${escapeAttribute(song.collectionId)}">${song.difficulties.map((entry) => optionMarkup(entry.packageId, entry.label, selectedPackageId)).join("")}</select></label>`;
+  const deleteControls = pendingDelete
+    ? `<span role="status">Delete ${escapeHtml(label)}?</span><button type="button" aria-label="Confirm delete ${accessibleLabel}" data-intent="library-delete" data-value="${escapeAttribute(song.collectionId)}">Confirm</button><button type="button" aria-label="Cancel deleting ${accessibleLabel}" data-intent="library-delete-cancel" data-value="${escapeAttribute(song.collectionId)}">Cancel</button>`
+    : `<button type="button" aria-label="Delete ${accessibleLabel}" data-intent="library-delete-request" data-value="${escapeAttribute(song.collectionId)}">Delete</button>`;
+  return `<div class="row compact-library-actions" part="selected-actions" aria-label="Selected song actions"><button class="compact-preview-action" part="preview-button" type="button" aria-label="${previewLabel} ${accessibleLabel}" aria-pressed="${previewActive}" aria-busy="${exactPreview && preview.state === "loading"}" data-intent="library-preview-toggle" data-value="${escapeAttribute(selectedPackageId)}">${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${difficultyField}<button type="button" aria-label="Export ${accessibleLabel}" data-intent="library-export" data-value="${escapeAttribute(selectedPackageId)}">Export</button>${deleteControls}</div>`;
 }
 
 /** @param {Readonly<Record<string, unknown>>} item @param {string} pendingDeletePackageId @param {boolean} checked @returns {string} */
