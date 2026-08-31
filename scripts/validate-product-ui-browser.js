@@ -700,7 +700,7 @@ try {
       const sections = [gameplay, visuals];
       const controls = sections.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const visibleText = sections.map((host) => host.shadowRoot?.querySelector("section")?.textContent ?? "").join(" ");
-      const conversionLegend = gameplay.shadowRoot?.querySelector(".product-group-heading");
+      const conversionLegend = gameplay.shadowRoot?.querySelector("legend.product-group-heading");
       const conversionLegendBounds = conversionLegend?.getBoundingClientRect();
       const conversionLegendStyle = conversionLegend ? getComputedStyle(conversionLegend) : null;
       return {
@@ -743,7 +743,7 @@ try {
       const conversion = gameplay.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "";
       gameplay.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
       gameplay.shadowRoot?.querySelector("input[value='row_family_balanced_height_v1']")?.click();
-      const conversionLegend = gameplay.shadowRoot?.querySelector(".product-group-heading");
+      const conversionLegend = gameplay.shadowRoot?.querySelector("legend.product-group-heading");
       const conversionLegendBounds = conversionLegend?.getBoundingClientRect();
       const conversionLegendStyle = conversionLegend ? getComputedStyle(conversionLegend) : null;
       return {
