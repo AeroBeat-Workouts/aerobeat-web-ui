@@ -129,7 +129,9 @@ try {
   assert(validation.actual.pixels.nonTransparent > 20 && validation.actual.pixels.partialAlpha > 20, `Actual PlayCanvas overlay pixels were missing: ${JSON.stringify(validation.actual.pixels)}.`);
   assert(validation.actual.stableCanvas === true, "Preview replaced its stable canvas during reconnect.");
   assert(validation.actual.detachedStatus.attached === false, "Preview did not detach PlayCanvas on disconnect.");
+  assert(validation.actual.detachedStatus.pointerLockActive === false, "Detached PlayCanvas preview falsely reported pointer lock.");
   assert(validation.actual.reconnectedStatus.attached === true, "Preview did not reattach PlayCanvas on reconnect.");
+  assert(validation.actual.reconnectedStatus.pointerLockActive === false, "Reconnected preview falsely reported pointer lock without a request.");
   assert(validation.actual.reconnectedPixels.nonTransparent > 20, "Reconnected PlayCanvas overlay did not render pixels.");
   assert(validation.actual.canvas.landmarkCount === "7", "Actual PlayCanvas preview lost landmark diagnostics after reconnect.");
 } finally {
