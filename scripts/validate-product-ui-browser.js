@@ -690,21 +690,32 @@ try {
       visuals.setAttribute("scope", "visuals");
       gameplay.setAttribute("compact", "");
       visuals.setAttribute("compact", "");
-      gameplay.setSnapshot({ selectedProfileId: "flow", sessionState: "idle" });
+      gameplay.setSnapshot({ selectedProfileId: "spatial-cut", sessionState: "idle" });
       visuals.setSnapshot(snapshot);
+      const intents = [];
+      gameplay.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) intents.push(event.detail); });
       app.append(gameplay, visuals);
+      gameplay.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+      gameplay.shadowRoot?.querySelector("input[value='row_family_balanced_height_v1']")?.click();
       const sections = [gameplay, visuals];
       const controls = sections.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const visibleText = sections.map((host) => host.shadowRoot?.querySelector("section")?.textContent ?? "").join(" ");
+      const conversionLegend = gameplay.shadowRoot?.querySelector(".product-group-heading");
+      const conversionLegendBounds = conversionLegend?.getBoundingClientRect();
+      const conversionLegendStyle = conversionLegend ? getComputedStyle(conversionLegend) : null;
       return {
         labels: sections.map((host) => [...(host.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "")),
         checked: sections.map((host) => host.shadowRoot?.querySelectorAll("input:checked").length ?? 0),
+        conversionLegendText: conversionLegend?.textContent?.trim() ?? "",
+        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
+        modeIntent: intents.find((intent) => intent?.type === "gameplay-mode-select")?.payload,
+        conversionIntent: intents.find((intent) => intent?.type === "boxing-conversion-select")?.payload,
         forbiddenText: /(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(visibleText),
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         controlsVisible: controls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.appearance !== "none" && style.visibility === "visible"; })
       };
     });
-    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing Lanes|Boxing Grid" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} scoped product selector evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Conversion" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(scopedEvidence.conversionIntent ?? {}).length === 1 && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
     await scopedPage.evaluate((sourceUrl) => {
       const iframe = document.createElement("iframe");
@@ -725,16 +736,29 @@ try {
       gameplay.setAttribute("scope", "gameplay");
       gameplay.setAttribute("compact", "");
       gameplay.setSnapshot({ selectedProfileId: "spatial-cut", sessionState: "idle" });
+      const intents = [];
+      gameplay.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) intents.push(event.detail); });
       app.append(gameplay);
+      const mode = gameplay.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "";
+      const conversion = gameplay.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "";
+      gameplay.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+      gameplay.shadowRoot?.querySelector("input[value='row_family_balanced_height_v1']")?.click();
+      const conversionLegend = gameplay.shadowRoot?.querySelector(".product-group-heading");
+      const conversionLegendBounds = conversionLegend?.getBoundingClientRect();
+      const conversionLegendStyle = conversionLegend ? getComputedStyle(conversionLegend) : null;
       return {
         labels: [...(gameplay.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? ""),
-        mode: gameplay.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "",
-        conversion: gameplay.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "",
+        mode,
+        conversion,
         checked: gameplay.shadowRoot?.querySelectorAll("input:checked").length ?? 0,
+        conversionLegendText: conversionLegend?.textContent?.trim() ?? "",
+        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
+        modeIntent: intents.find((intent) => intent?.type === "gameplay-mode-select")?.payload,
+        conversionIntent: intents.find((intent) => intent?.type === "boxing-conversion-select")?.payload,
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
       };
     });
-    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && !iframeEvidence.overflow, `${viewport.name} iframe scoped Gameplay evidence failed: ${JSON.stringify(iframeEvidence)}.`);
+    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && iframeEvidence.conversionLegendText === "Conversion" && iframeEvidence.conversionLegendVisible && iframeEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(iframeEvidence.modeIntent ?? {}).length === 1 && iframeEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(iframeEvidence.conversionIntent ?? {}).length === 1 && !iframeEvidence.overflow, `${viewport.name} compact iframe scoped Gameplay label/payload evidence failed: ${JSON.stringify(iframeEvidence)}.`);
     await scopedPage.close();
   }
   for (const viewport of [
