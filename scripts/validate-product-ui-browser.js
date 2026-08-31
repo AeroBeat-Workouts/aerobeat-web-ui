@@ -707,7 +707,7 @@ try {
         labels: sections.map((host) => [...(host.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "")),
         checked: sections.map((host) => host.shadowRoot?.querySelectorAll("input:checked").length ?? 0),
         conversionLegendText: conversionLegend?.textContent?.trim() ?? "",
-        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
+        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendStyle.position === "static" && conversionLegendStyle.clipPath === "none" && conversionLegendStyle.overflow === "visible" && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
         modeIntent: intents.find((intent) => intent?.type === "gameplay-mode-select")?.payload,
         conversionIntent: intents.find((intent) => intent?.type === "boxing-conversion-select")?.payload,
         forbiddenText: /(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(visibleText),
@@ -752,7 +752,7 @@ try {
         conversion,
         checked: gameplay.shadowRoot?.querySelectorAll("input:checked").length ?? 0,
         conversionLegendText: conversionLegend?.textContent?.trim() ?? "",
-        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
+        conversionLegendVisible: Boolean(conversionLegendStyle && conversionLegendBounds && conversionLegendStyle.display !== "none" && conversionLegendStyle.visibility === "visible" && Number(conversionLegendStyle.opacity) > 0 && conversionLegendStyle.position === "static" && conversionLegendStyle.clipPath === "none" && conversionLegendStyle.overflow === "visible" && conversionLegendBounds.width > 1 && conversionLegendBounds.height > 1),
         modeIntent: intents.find((intent) => intent?.type === "gameplay-mode-select")?.payload,
         conversionIntent: intents.find((intent) => intent?.type === "boxing-conversion-select")?.payload,
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
