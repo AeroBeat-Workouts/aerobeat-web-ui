@@ -54,8 +54,11 @@ assert.ok(presenters.includes('readRecordList(snapshot, "songs")') && presenters
 assert.ok(presenters.includes("compactLibraryMarkup") && presenters.includes("normalizeDownloadedSong") && presenters.includes("No downloaded songs."), "Compact downloaded-song states are incomplete.");
 assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "Calibration composition does not preserve media/render surfaces across snapshots.");
 for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
-  assert.ok(presenters.includes(profileId), `Missing prototype profile ${profileId}`);
+  assert.ok(presenters.includes(profileId), `Missing internal prototype profile ${profileId}`);
 }
+for (const label of ["Flow", "Boxing Lanes", "Boxing Grid", "Balanced Height", "Source Height"]) assert.ok(presenters.includes(`label: "${label}"`), `Missing scoped product choice ${label}.`);
+for (const intent of ["gameplay-mode-select", "boxing-conversion-select"]) assert.ok(presenters.includes(`\"${intent}\"`), `Missing scoped scalar intent ${intent}.`);
+assert.ok(presenters.includes("{ rulesetId }") && presenters.includes("{ recipeId }"), "Scoped Gameplay intents do not expose bounded scalar IDs.");
 for (const profileClass of ["live_visual", "between_run_ruleset", "converter_regeneration"]) assert.ok(presenters.includes(`\"${profileClass}\"`), `Missing profile class ${profileClass}.`);
 for (const field of ["selectedContentHash", "appliedContentHash", "pendingContentHash", "experimental", "regenerationRequired"]) assert.ok(presenters.includes(field), `Missing bounded profile state field ${field}.`);
 for (const forbiddenProfileFeature of ["survey", "winner", "preference", "leaderboard"]) assert.equal(presenters.toLowerCase().includes(forbiddenProfileFeature), false, `Profile presenter contains forbidden promotion feature ${forbiddenProfileFeature}.`);

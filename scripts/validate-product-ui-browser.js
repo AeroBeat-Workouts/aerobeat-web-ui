@@ -238,11 +238,26 @@ try {
     visualsSelector.setSnapshot(selector.presenterSnapshot);
     document.body.append(gameplaySelector, visualsSelector);
     const gameplayLabels = [...(gameplaySelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
+    const gameplayGroupLabels = [...(gameplaySelector.shadowRoot?.querySelectorAll("fieldset") ?? [])].map((group) => [...group.querySelectorAll("label span")].map((label) => label.textContent ?? ""));
     const visualLabels = [...(visualsSelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
     const gameplayChecked = gameplaySelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
     const visualChecked = visualsSelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
-    const gameplaySelected = gameplaySelector.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const gameplaySelected = gameplaySelector.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "";
+    const conversionSelected = gameplaySelector.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "";
     const visualSelected = visualsSelector.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const exactVariantMatrix = ["flow", "semantic-row", "spatial-row", "semantic-cut", "spatial-cut"].map((selectedProfileId) => {
+      const candidate = document.createElement("aero-prototype-selector");
+      candidate.scope = "gameplay";
+      candidate.setSnapshot({ selectedProfileId, sessionState: "idle" });
+      document.body.append(candidate);
+      const result = [selectedProfileId, candidate.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "", candidate.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "", String(candidate.shadowRoot?.querySelectorAll("input:checked").length ?? 0)].join(":");
+      candidate.remove();
+      return result;
+    });
+    gameplaySelector.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+    gameplaySelector.shadowRoot?.querySelector("input[value='cut_family_source_height_v1']")?.click();
+    const scopedModeIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
+    const scopedConversionIntent = captured.findLast((intent) => intent?.type === "boxing-conversion-select")?.payload;
     const scopedText = `${gameplaySelector.shadowRoot?.querySelector("section")?.textContent ?? ""} ${visualsSelector.shadowRoot?.querySelector("section")?.textContent ?? ""}`;
     const nativeRadioVisibility = [...(gameplaySelector.shadowRoot?.querySelectorAll("input[type='radio']") ?? []), ...(visualsSelector.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])].every((radio) => {
       const style = getComputedStyle(radio);
@@ -256,6 +271,7 @@ try {
     gameplayFallback.setSnapshot({ selectedProfileId: "not-a-profile", sessionState: "idle" });
     document.body.append(gameplayFallback);
     const gameplayFallbackId = gameplayFallback.shadowRoot?.querySelector("input:checked")?.value ?? "";
+    const gameplayFallbackChecked = gameplayFallback.shadowRoot?.querySelectorAll("input:checked").length ?? 0;
     const visualFallback = document.createElement("aero-prototype-selector");
     visualFallback.scope = "visuals";
     const leaderlessSnapshot = structuredClone(selector.presenterSnapshot);
@@ -267,13 +283,13 @@ try {
     leaderlessSnapshot.profileClasses[0].active.schema = "malicious/schema";
     visualFallback.setSnapshot(leaderlessSnapshot);
     const scopedAtomicRejection = visualFallback.shadowRoot?.innerHTML === scopedBeforeAttack;
-    const detachedScopedInput = gameplayFallback.shadowRoot?.querySelector("input[value='semantic-row']");
+    const detachedScopedInput = gameplayFallback.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']");
     gameplayFallback.remove();
-    const beforeDetachedScoped = captured.filter((intent) => intent.type === "prototype-select").length;
+    const beforeDetachedScoped = captured.filter((intent) => intent.type === "gameplay-mode-select").length;
     detachedScopedInput?.click();
     document.body.append(gameplayFallback);
-    gameplayFallback.shadowRoot?.querySelector("input[value='semantic-row']")?.click();
-    const scopedReconnectIntentCount = captured.filter((intent) => intent.type === "prototype-select").length - beforeDetachedScoped;
+    gameplayFallback.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+    const scopedReconnectIntentCount = captured.filter((intent) => intent.type === "gameplay-mode-select").length - beforeDetachedScoped;
 
     const mapSnapshot = (selectedMapId) => ({ state: "results", results: [{ mapId: "map-alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "map-beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: selectedMapId, name: "Selected Song", songAuthorName: "Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
     const currentMapBrowser = document.createElement("aero-beatsaver-browser");
@@ -411,15 +427,21 @@ try {
       instanceIntents,
       defaultFullMarkupUnchanged,
       gameplayLabels,
+      gameplayGroupLabels,
       visualLabels,
       gameplayChecked,
       visualChecked,
       gameplaySelected,
+      conversionSelected,
       visualSelected,
+      exactVariantMatrix,
+      scopedModeIntent,
+      scopedConversionIntent,
       scopedText,
       nativeRadioVisibility,
       scopedVisualIntent,
       gameplayFallbackId,
+      gameplayFallbackChecked,
       visualFallbackId,
       scopedAtomicRejection,
       scopedReconnectIntentCount,
@@ -473,6 +495,8 @@ try {
     return { checked: scoped?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: scoped?.shadowRoot?.activeElement?.value ?? "" };
   });
   await page.keyboard.press("Tab");
+  const scopedConversionTab = await page.evaluate(() => { const scoped = document.querySelector("#scoped-keyboard-test"); return scoped?.shadowRoot?.activeElement?.value ?? ""; });
+  await page.keyboard.press("Tab");
   const scopedTabExited = await page.evaluate(() => document.activeElement?.id === "after-scoped-keyboard-test");
   await page.keyboard.press("Shift+Tab");
   const scopedTabReturned = await page.evaluate(() => {
@@ -482,7 +506,7 @@ try {
     document.querySelector("#after-scoped-keyboard-test")?.remove();
     return returned;
   });
-  assert(scopedArrow.checked === "semantic-cut" && scopedArrow.focused === "semantic-cut" && scopedTabExited && scopedTabReturned === "semantic-cut", "Scoped native radio Arrow/Tab keyboard behavior failed.");
+  assert(scopedArrow.checked === "flow_grid_v1" && scopedArrow.focused === "flow_grid_v1" && scopedConversionTab === "row_family_balanced_height_v1" && scopedTabExited && scopedTabReturned === "row_family_balanced_height_v1", "Scoped native radio Arrow/Tab keyboard behavior failed.");
   await page.evaluate(() => {
     const browser = document.createElement("aero-beatsaver-browser");
     browser.id = "music-map-keyboard-test";
@@ -517,12 +541,14 @@ try {
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
   assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the full development presenter field-for-field.");
-  assert(adversarial.gameplayLabels.join("|") === "Flow|Semantic Row|Spatial Row|Semantic Cut|Spatial Cut" && adversarial.visualLabels.join("|") === "Default|Compact", "Scoped selectors exposed incorrect product labels.");
-  assert(adversarial.gameplayChecked === 1 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "spatial-row" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not preserve exactly one valid active selection.");
+  assert(adversarial.gameplayLabels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow", "Boxing Lanes", "Boxing Grid"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact", "Scoped selectors exposed incorrect product labels or groups.");
+  assert(adversarial.gameplayChecked === 2 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "boxing_spatial_grid_v1" && adversarial.conversionSelected === "row_family_balanced_height_v1" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact mode and conversion selections.");
+  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_grid_v1::1|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  assert(adversarial.scopedModeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(adversarial.scopedModeIntent ?? {}).length === 1 && adversarial.scopedConversionIntent?.recipeId === "cut_family_source_height_v1" && Object.keys(adversarial.scopedConversionIntent ?? {}).length === 1, "Scoped Gameplay intents changed their bounded scalar contract.");
   assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
   assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
   assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
-  assert(adversarial.gameplayFallbackId === "flow" && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
+  assert(adversarial.gameplayFallbackId === "flow_grid_v1" && adversarial.gameplayFallbackChecked === 1 && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
   assert(adversarial.scopedAtomicRejection && adversarial.scopedReconnectIntentCount === 1, `Scoped selector atomicity or reconnect listener exactness regressed: ${JSON.stringify({ atomic: adversarial.scopedAtomicRejection, reconnectIntents: adversarial.scopedReconnectIntentCount })}`);
   assert(adversarial.currentMapChecked === "map-beta" && adversarial.fallbackMapChecked === "map-alpha" && adversarial.mapCheckedCounts.join(",") === "1,1,0", "BeatSaver radios did not preserve current selection, first fallback, and empty truth.");
   assert(adversarial.currentPackageChecked === "package-beta" && adversarial.fallbackPackageChecked === "package-alpha" && adversarial.packageCheckedCounts.join(",") === "1,1,0", "Library radios did not preserve current selection, first fallback, and empty truth.");
@@ -678,8 +704,37 @@ try {
         controlsVisible: controls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.appearance !== "none" && style.visibility === "visible"; })
       };
     });
-    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Semantic Row|Spatial Row|Semantic Cut|Spatial Cut" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} scoped product selector evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing Lanes|Boxing Grid" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} scoped product selector evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
+    await scopedPage.evaluate((sourceUrl) => {
+      const iframe = document.createElement("iframe");
+      iframe.id = "scoped-gameplay-iframe";
+      iframe.src = sourceUrl;
+      iframe.style.cssText = "border:0;display:block;height:100%;width:100%;box-sizing:border-box";
+      document.body.append(iframe);
+    }, `${url}.testbed/demo/product-ui-validation.html`);
+    const iframeHandle = await scopedPage.waitForSelector("#scoped-gameplay-iframe");
+    const scopedFrame = await iframeHandle.contentFrame();
+    if (!scopedFrame) throw new Error(`${viewport.name} scoped iframe did not expose a frame.`);
+    await scopedFrame.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
+    const iframeEvidence = await scopedFrame.evaluate(() => {
+      const app = document.querySelector("#app");
+      if (!(app instanceof HTMLElement)) return null;
+      app.replaceChildren();
+      const gameplay = document.createElement("aero-prototype-selector");
+      gameplay.setAttribute("scope", "gameplay");
+      gameplay.setAttribute("compact", "");
+      gameplay.setSnapshot({ selectedProfileId: "spatial-cut", sessionState: "idle" });
+      app.append(gameplay);
+      return {
+        labels: [...(gameplay.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? ""),
+        mode: gameplay.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "",
+        conversion: gameplay.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "",
+        checked: gameplay.shadowRoot?.querySelectorAll("input:checked").length ?? 0,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+      };
+    });
+    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && !iframeEvidence.overflow, `${viewport.name} iframe scoped Gameplay evidence failed: ${JSON.stringify(iframeEvidence)}.`);
     await scopedPage.close();
   }
   for (const viewport of [
@@ -906,7 +961,7 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Semantic Row", "Spatial Row", "Semantic Cut", "Spatial Cut"],
+      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],

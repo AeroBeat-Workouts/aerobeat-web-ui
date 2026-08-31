@@ -20,7 +20,9 @@ Components fill their assigned parent surfaces and never own `body`, history, ro
 
 ## Profiles and tuning
 
-`aero-prototype-selector` exposes Flow plus the four experimental Semantic Track/Spatial Grid × Row Family/Cut Family combinations. It displays visual, ruleset, and converter identity/version/hash telemetry and marks converter changes that require regeneration. It emits select/import-request/export/reset intent only and does not mutate profiles or regenerate content.
+The default `aero-prototype-selector` development presenter retains Flow plus the four exact experimental ruleset/recipe combinations and its visual, ruleset, and converter identity/version/hash telemetry. The scoped product presenter derives independent controls from the exact `selectedProfileId`: Gameplay is `Flow` (`flow_grid_v1`), `Boxing Lanes` (`boxing_semantic_track_v1`), or `Boxing Grid` (`boxing_spatial_grid_v1`); Boxing also exposes Conversion as `Balanced Height` (`row_family_balanced_height_v1`) or `Source Height` (`cut_family_source_height_v1`). All four Boxing combinations remain selectable without a preferred winner.
+
+Scoped Gameplay emits `gameplay-mode-select` with the exact scalar payload `{ rulesetId }`. Scoped Conversion emits `boxing-conversion-select` with the exact scalar payload `{ recipeId }`. Assembly combines each intent with bounded current/retained mode and conversion state, resolves an existing exact variant, and projects that `selectedProfileId` back in the next snapshot. Because Flow has no conversion selection, assembly must retain its last Boxing conversion choice or establish product policy outside this presenter before resolving a Flow-to-Boxing intent; the UI does not choose a conversion winner. No combined variant, package, profile, or service object crosses the UI boundary. Default development select/import-request/export/reset behavior remains unchanged; the presenter does not mutate profiles or regenerate content.
 
 ## Fullscreen
 

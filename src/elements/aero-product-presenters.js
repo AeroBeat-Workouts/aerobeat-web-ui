@@ -551,11 +551,20 @@ export class AeroErrorPanel extends AeroPresenterElement {
 }
 
 const prototypeOptions = Object.freeze([
-  Object.freeze({ id: "flow", label: "Flow · Grid", productLabel: "Flow", rulesetId: rulesetIds[0], recipeId: "" }),
-  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", productLabel: "Semantic Row", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", productLabel: "Spatial Row", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", productLabel: "Semantic Cut", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[1] }),
-  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", productLabel: "Spatial Cut", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[1] })
+  Object.freeze({ id: "flow", label: "Flow · Grid", rulesetId: rulesetIds[0], recipeId: "" }),
+  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[1] }),
+  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[1] })
+]);
+const gameplayModeOptions = Object.freeze([
+  Object.freeze({ id: rulesetIds[0], label: "Flow", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: rulesetIds[1], label: "Boxing Lanes", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: rulesetIds[2], label: "Boxing Grid", profileClass: "", profileVersion: "", contentHash: "" })
+]);
+const boxingConversionOptions = Object.freeze([
+  Object.freeze({ id: conversionRecipeIds[0], label: "Balanced Height", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: conversionRecipeIds[1], label: "Source Height", profileClass: "", profileVersion: "", contentHash: "" })
 ]);
 
 const profileClasses = Object.freeze(["live_visual", "between_run_ruleset", "converter_regeneration"]);
@@ -596,8 +605,8 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
     const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
     const selected = prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow";
     if (this.scope === "gameplay") {
-      const options = prototypeOptions.map((option) => Object.freeze({ id: option.id, label: option.productLabel, profileClass: "", profileVersion: "", contentHash: "" }));
-      this.renderMarkup(productRadioMarkup("Gameplay", "gameplay-choice", options, Math.max(0, options.findIndex((option) => option.id === selected)), "prototype-select"));
+      const selectedVariant = prototypeOptions.find((option) => option.id === selected) ?? prototypeOptions[0];
+      this.renderMarkup(gameplayProductMarkup(selectedVariant));
       return;
     }
     if (this.scope === "visuals") {
@@ -634,6 +643,12 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
         }
       }
       this.emitIntent(type, { profileId: target.dataset.value ?? "" });
+    } else if (type === "gameplay-mode-select") {
+      const rulesetId = target.dataset.value ?? "";
+      if (gameplayModeOptions.some((option) => option.id === rulesetId)) this.emitIntent(type, { rulesetId });
+    } else if (type === "boxing-conversion-select") {
+      const recipeId = target.dataset.value ?? "";
+      if (boxingConversionOptions.some((option) => option.id === recipeId)) this.emitIntent(type, { recipeId });
     } else if (type === "prototype-profile-select") {
       this.emitIntent(type, { profileClass: target.dataset.profileClass ?? "", profileId: target.dataset.value ?? "", profileVersion: target.dataset.profileVersion ?? "", contentHash: target.dataset.contentHash ?? "" });
     } else this.emitIntent(type);
@@ -929,10 +944,26 @@ function calibrationMessage(state) { const messages = /** @type {Readonly<Record
 /** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],experimental:boolean,selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
 /** @typedef {Readonly<{id:string,label:string,profileClass:string,profileVersion:string,contentHash:string}>} ProductRadioOption */
 
+/** Scoped Gameplay derives both independent controls from one exact variant snapshot. @param {Readonly<{rulesetId:string,recipeId:string}>} selectedVariant @returns {string} */
+function gameplayProductMarkup(selectedVariant) {
+  const modeIndex = Math.max(0, gameplayModeOptions.findIndex((option) => option.id === selectedVariant.rulesetId));
+  const boxing = selectedVariant.rulesetId !== rulesetIds[0];
+  const conversionIndex = Math.max(0, boxingConversionOptions.findIndex((option) => option.id === selectedVariant.recipeId));
+  const conversion = boxing ? `<fieldset part="conversion-choices"><legend class="product-group-heading">Conversion</legend>${productRadioChoicesMarkup("boxing-conversion-choice", boxingConversionOptions, conversionIndex, "boxing-conversion-select")}</fieldset>` : "";
+  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">Gameplay</h2><fieldset part="choices"><legend class="visually-hidden">Choose Gameplay</legend>${productRadioChoicesMarkup("gameplay-mode-choice", gameplayModeOptions, modeIndex, "gameplay-mode-select")}</fieldset>${conversion}</section>${productRadioStyles}`;
+}
+
 /** Native product radio group with no development identity text. @param {string} heading @param {string} name @param {readonly ProductRadioOption[]} options @param {number} selectedIndex @param {string} intent @returns {string} */
 function productRadioMarkup(heading, name, options, selectedIndex, intent) {
-  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">${escapeHtml(heading)}</h2><fieldset part="choices"><legend class="visually-hidden">Choose ${escapeHtml(heading)}</legend><div class="product-radios">${options.map((option, index) => `<label class="product-radio"><input type="radio" name="${escapeAttribute(name)}" value="${escapeAttribute(option.id)}" data-intent="${escapeAttribute(intent)}" data-value="${escapeAttribute(option.id)}" data-profile-class="${escapeAttribute(option.profileClass)}" data-profile-version="${escapeAttribute(option.profileVersion)}" data-content-hash="${escapeAttribute(option.contentHash)}" ${index === selectedIndex ? "checked" : ""}><span>${escapeHtml(option.label)}</span></label>`).join("")}</div></fieldset></section><style>:host([scope]) .product-selector{gap:8px}:host([scope]) fieldset{border:0;margin:0;min-inline-size:0;padding:0}:host([scope]) .product-radios{display:grid;gap:6px}:host([scope]) .product-radio{align-items:center;background:rgba(255,255,255,.72);border:1px solid rgba(53,141,175,.3);border-radius:10px;cursor:pointer;display:flex;font-size:1rem;gap:10px;min-block-size:42px;padding:0 10px}:host([scope]) .product-radio:has(input:checked){background:rgba(10,132,255,.14);border-color:var(--aero-color-focus,#0a84ff);box-shadow:inset 0 0 0 1px var(--aero-color-focus,#0a84ff)}:host([scope]) .product-radio input[type="radio"]{accent-color:var(--aero-color-focus,#0a84ff);block-size:42px;flex:0 0 42px;inline-size:42px;margin:0;padding:0}:host([scope]) .product-radio span{font-weight:750}:host([scope][compact]) .product-selector h2{block-size:1px;clip:rect(0 0 0 0);clip-path:inset(50%);inline-size:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;white-space:nowrap}</style>`;
+  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">${escapeHtml(heading)}</h2><fieldset part="choices"><legend class="visually-hidden">Choose ${escapeHtml(heading)}</legend>${productRadioChoicesMarkup(name, options, selectedIndex, intent)}</fieldset></section>${productRadioStyles}`;
 }
+
+/** @param {string} name @param {readonly ProductRadioOption[]} options @param {number} selectedIndex @param {string} intent @returns {string} */
+function productRadioChoicesMarkup(name, options, selectedIndex, intent) {
+  return `<div class="product-radios">${options.map((option, index) => `<label class="product-radio"><input type="radio" name="${escapeAttribute(name)}" value="${escapeAttribute(option.id)}" data-intent="${escapeAttribute(intent)}" data-value="${escapeAttribute(option.id)}" data-profile-class="${escapeAttribute(option.profileClass)}" data-profile-version="${escapeAttribute(option.profileVersion)}" data-content-hash="${escapeAttribute(option.contentHash)}" ${index === selectedIndex ? "checked" : ""}><span>${escapeHtml(option.label)}</span></label>`).join("")}</div>`;
+}
+
+const productRadioStyles = `<style>:host([scope]) .product-selector{gap:8px}:host([scope]) fieldset{border:0;margin:0;min-inline-size:0;padding:0}:host([scope]) .product-group-heading{font-size:.94rem;font-weight:750;margin-block-end:6px;padding:0}:host([scope]) .product-radios{display:grid;gap:6px}:host([scope]) .product-radio{align-items:center;background:rgba(255,255,255,.72);border:1px solid rgba(53,141,175,.3);border-radius:10px;cursor:pointer;display:flex;font-size:1rem;gap:10px;min-block-size:42px;padding:0 10px}:host([scope]) .product-radio:has(input:checked){background:rgba(10,132,255,.14);border-color:var(--aero-color-focus,#0a84ff);box-shadow:inset 0 0 0 1px var(--aero-color-focus,#0a84ff)}:host([scope]) .product-radio input[type="radio"]{accent-color:var(--aero-color-focus,#0a84ff);block-size:42px;flex:0 0 42px;inline-size:42px;margin:0;padding:0}:host([scope]) .product-radio span{font-weight:750}:host([scope][compact]) .product-selector h2,:host([scope][compact]) .product-group-heading{block-size:1px;clip:rect(0 0 0 0);clip-path:inset(50%);inline-size:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;white-space:nowrap}</style>`;
 
 /** Human-facing live visual label. @param {string} profileId @returns {string} */
 function visualProfileLabel(profileId) {
