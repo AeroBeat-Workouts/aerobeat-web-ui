@@ -32,9 +32,9 @@ const pageErrors = [];
 
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ deviceScaleFactor: 2 });
   page.on("console", (message) => {
-    if (message.type() === "warning" || message.type() === "error") {
+    if ((message.type() === "warning" || message.type() === "error") && !message.text().includes("GPU stall due to ReadPixels")) {
       consoleNoise.push(`${message.type()}: ${message.text()}`);
     }
   });
@@ -46,8 +46,8 @@ try {
   await page.waitForFunction(() => Boolean(window.__aeroPreviewValidation));
   const validation = await page.evaluate(() => window.__aeroPreviewValidation);
 
-  assert(validation.canvas.width === 640, "Overlay canvas width did not match visible preview width.");
-  assert(validation.canvas.height === 360, "Overlay canvas height did not match visible preview height.");
+  assert(validation.canvas.width === 1280, "Overlay canvas width did not match the DPR2 preview width.");
+  assert(validation.canvas.height === 720, "Overlay canvas height did not match the DPR2 preview height.");
   assert(validation.canvas.landmarkCount === "7", "Overlay canvas did not record the requested landmark subset count.");
   assert(validation.video.fitMode === "cover", "Video element did not receive the latest fit mode.");
   assert(validation.video.mirrored === "false", "Video element did not receive the latest mirroring state.");
@@ -92,8 +92,8 @@ try {
     "Renderer overlay did not connect the nose to the right shoulder."
   );
   assert(validation.canvas.trackingProfile === "fast", "Overlay canvas did not expose the selected tracking profile.");
-  assert(approximatelyEqual(validation.canvas.contentRect.width, 640), "Cover content rect width was not mapped over the visible feed.");
-  assert(approximatelyEqual(validation.canvas.contentRect.height, 360), "Cover content rect height was not mapped over the visible feed.");
+  assert(approximatelyEqual(validation.canvas.contentRect.width, 1280), "Cover content rect width was not mapped over the DPR2 feed.");
+  assert(approximatelyEqual(validation.canvas.contentRect.height, 720), "Cover content rect height was not mapped over the DPR2 feed.");
   assert(validation.canvas.mediaPoseDeltaMs === "-51", "Default measured preview changed its media/measurement freshness metadata.");
   assert(validation.secondSnapshot.poseProvenance === "measured", "Default setPoseFrame behavior did not remain measured.");
   assert(validation.secondSnapshot.measurementTimestampMs === 1301, "Default measured timestamp compatibility changed.");
@@ -119,6 +119,19 @@ try {
   assert(validation.clearedSnapshot.predictionHorizonMs === undefined, "Clearing retained a stale prediction horizon.");
   assert(validation.clearedCanvas.poseProvenance === "", "Clearing retained canvas provenance.");
   assert(validation.clearedCanvas.landmarkCount === "0", "Clearing retained stale overlay landmarks.");
+
+  const resizeCalls = validation.calls.filter((call) => call.type === "resize");
+  assert(resizeCalls.some((call) => call.size.widthCssPx === 640 && call.size.heightCssPx === 360 && call.size.devicePixelRatio === 2), "Preview did not delegate exact CSS/DPR2 sizing to the renderer.");
+  assert(validation.actual.status.serviceId === "aero.renderer.playcanvas", "Actual preview did not use the PlayCanvas service identity.");
+  assert(validation.actual.status.engine === "playcanvas", "Actual preview did not expose the PlayCanvas engine.");
+  assert(validation.actual.status.viewportWidth === 1280 && validation.actual.status.viewportHeight === 720, "Actual PlayCanvas preview did not retain DPR2 backing dimensions.");
+  assert(validation.actual.capabilities.manualRendering === true && validation.actual.capabilities.secondAnimationFrame === false, "Preview renderer did not remain caller-driven without a second RAF.");
+  assert(validation.actual.pixels.nonTransparent > 20 && validation.actual.pixels.partialAlpha > 20, `Actual PlayCanvas overlay pixels were missing: ${JSON.stringify(validation.actual.pixels)}.`);
+  assert(validation.actual.stableCanvas === true, "Preview replaced its stable canvas during reconnect.");
+  assert(validation.actual.detachedStatus.attached === false, "Preview did not detach PlayCanvas on disconnect.");
+  assert(validation.actual.reconnectedStatus.attached === true, "Preview did not reattach PlayCanvas on reconnect.");
+  assert(validation.actual.reconnectedPixels.nonTransparent > 20, "Reconnected PlayCanvas overlay did not render pixels.");
+  assert(validation.actual.canvas.landmarkCount === "7", "Actual PlayCanvas preview lost landmark diagnostics after reconnect.");
 } finally {
   await browser.close();
   await server.close();

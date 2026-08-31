@@ -45,7 +45,7 @@ Existing reusable primitives remain exported: `aero-button`, `aero-select`, `aer
 
 - `aerobeat-web-contracts` owns public element names, ruleset/recipe IDs, snapshots and host/iframe contracts.
 - `aerobeat-web-style` owns generic theme tokens consumed through CSS custom properties.
-- `aerobeat-web-renderer` owns WebGL2 gameplay drawing attached through the grid host surface.
+- `aerobeat-web-renderer` owns the PlayCanvas gameplay and landmark-overlay renderer attached through stable UI canvas surfaces.
 - `aerobeat-web-video` owns camera/video lifecycle consumed by the preview presenter.
 - `aerobeat-web-vendor-beatsaver` owns browser provider acquisition and inspection.
 - `aerobeat-web-content-authoring` owns conversion, persistence and export.

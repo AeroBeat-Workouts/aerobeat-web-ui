@@ -3,7 +3,7 @@
 import { createBrowserVideoMediaFacade } from "@aerobeat/web-video";
 import {
   computeMediaContentRect,
-  createAeroWebGl2Renderer
+  createAeroPlayCanvasRenderer
 } from "@aerobeat/web-renderer";
 
 /**
@@ -71,7 +71,7 @@ const aeroPosePreviewTrackingProfiles = Object.freeze({
 
 /**
  * @typedef {ReturnType<CreateBrowserVideoMediaFacade>} BrowserVideoMediaFacade
- * @typedef {ReturnType<import("@aerobeat/web-renderer").createAeroWebGl2Renderer>} AeroWebGl2Renderer
+ * @typedef {ReturnType<import("@aerobeat/web-renderer").createAeroPlayCanvasRenderer>} AeroPlayCanvasRenderer
  */
 
 /**
@@ -146,7 +146,7 @@ const aeroPosePreviewTrackingProfiles = Object.freeze({
 
 /**
  * Web UI presenter that composes a video-owned media surface with the shared
- * WebGL2 renderer overlay path. CV and vendor adapters only provide pose data.
+ * PlayCanvas renderer overlay path. CV and vendor adapters only provide pose data.
  */
 export class AeroMediaPosePreview extends HTMLElement {
   /**
@@ -165,8 +165,8 @@ export class AeroMediaPosePreview extends HTMLElement {
     super();
     /** @type {BrowserVideoMediaFacade} */
     this.videoMediaFacade = createBrowserVideoMediaFacade();
-    /** @type {AeroWebGl2Renderer} */
-    this.renderer = createAeroWebGl2Renderer();
+    /** @type {AeroPlayCanvasRenderer} */
+    this.renderer = createAeroPlayCanvasRenderer();
     /** @type {AeroMediaPosePreviewSurface | undefined} */
     this.surface = undefined;
     /** @type {NormalizedPoseFrame | undefined} */
@@ -290,9 +290,9 @@ export class AeroMediaPosePreview extends HTMLElement {
   }
 
   /**
-   * Injects the WebGL2 overlay renderer owned by `@aerobeat/web-renderer`.
+   * Injects the PlayCanvas overlay renderer owned by `@aerobeat/web-renderer`.
    *
-   * @param {AeroWebGl2Renderer} renderer
+   * @param {AeroPlayCanvasRenderer} renderer
    * @returns {void}
    */
   setRenderer(renderer) {
@@ -498,24 +498,19 @@ export class AeroMediaPosePreview extends HTMLElement {
     if (!this.isConnected) {
       return;
     }
-    this.#sizeOverlayCanvas();
     this.renderer.attach(this.#canvasElement(), { alpha: true, antialias: true });
+    this.#sizeOverlayCanvas();
   }
 
   /**
    * @returns {void}
    */
   #sizeOverlayCanvas() {
-    const canvas = this.#canvasElement();
     const rect = this.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width || this.clientWidth || 640));
-    const height = Math.max(1, Math.round(rect.height || this.clientHeight || 360));
-    if (canvas.width !== width) {
-      canvas.width = width;
-    }
-    if (canvas.height !== height) {
-      canvas.height = height;
-    }
+    const widthCssPx = Math.max(1, rect.width || this.clientWidth || 640);
+    const heightCssPx = Math.max(1, rect.height || this.clientHeight || 360);
+    const devicePixelRatio = Math.max(1, Number(globalThis.devicePixelRatio) || 1);
+    this.renderer.resize({ widthCssPx, heightCssPx, devicePixelRatio });
   }
 
   /**

@@ -33,25 +33,38 @@
       const preview = document.createElement("aero-media-pose-preview");
       const calls = [];
       const renderer = {
-        serviceId: "aero.renderer.webgl2",
+        serviceId: "aero.renderer.playcanvas",
+        canvas: null,
         attach(canvas) {
+          this.canvas = canvas;
           calls.push({ type: "attach", width: canvas.width, height: canvas.height });
+          return this.describe();
+        },
+        resize(size) {
+          calls.push({ type: "resize", size: { ...size } });
+          if (this.canvas) {
+            this.canvas.style.width = `${size.widthCssPx}px`;
+            this.canvas.style.height = `${size.heightCssPx}px`;
+            this.canvas.width = Math.round(size.widthCssPx * Math.min(size.devicePixelRatio, 2));
+            this.canvas.height = Math.round(size.heightCssPx * Math.min(size.devicePixelRatio, 2));
+          }
           return this.describe();
         },
         detach() {
           calls.push({ type: "detach" });
+          this.canvas = null;
           return this.describe();
         },
         describe() {
           return {
-            serviceId: "aero.renderer.webgl2",
-            state: "running",
-            supported: true,
-            attached: true,
+            serviceId: "aero.renderer.playcanvas",
+            state: this.canvas ? "running" : "unsupported",
+            supported: Boolean(this.canvas),
+            attached: Boolean(this.canvas),
             frameCount: calls.filter((call) => call.type === "clear").length,
             drawCount: calls.filter((call) => call.type === "overlay").length,
-            viewportWidth: 640,
-            viewportHeight: 360,
+            viewportWidth: this.canvas?.width ?? 0,
+            viewportHeight: this.canvas?.height ?? 0,
             errorMessage: undefined
           };
         },
@@ -146,6 +159,24 @@
       const clearedSnapshot = preview.describePreview();
       const clearedCanvas = describeCanvas(preview);
 
+      const actualPreview = document.createElement("aero-media-pose-preview");
+      document.body.append(actualPreview);
+      actualPreview.setSurfaceDescriptor(aeroMediaPosePreviewDebugData.surface);
+      actualPreview.setTrackingProfile("fast");
+      actualPreview.setPoseFrame(aeroMediaPosePreviewDebugData.secondPoseFrame);
+      actualPreview.renderPreview();
+      const actualCanvas = actualPreview.shadowRoot.querySelector("canvas");
+      const initialActualCanvas = actualCanvas;
+      const actualPixels = sampleCanvas(actualCanvas);
+      const actualStatus = actualPreview.renderer.describe();
+      const actualCapabilities = actualPreview.renderer.getCapabilities();
+      actualPreview.remove();
+      const detachedStatus = actualPreview.renderer.describe();
+      document.body.append(actualPreview);
+      actualPreview.renderPreview();
+      const reconnectedStatus = actualPreview.renderer.describe();
+      const reconnectedPixels = sampleCanvas(actualCanvas);
+
       window.__aeroPreviewValidation = {
         firstSnapshot,
         smootherSnapshot,
@@ -157,6 +188,16 @@
         predictedCanvas,
         clearedCanvas,
         calls,
+        actual: {
+          status: actualStatus,
+          capabilities: actualCapabilities,
+          pixels: actualPixels,
+          detachedStatus,
+          reconnectedStatus,
+          reconnectedPixels,
+          stableCanvas: actualCanvas === initialActualCanvas,
+          canvas: describeCanvas(actualPreview)
+        },
         video: {
           fitMode: preview.shadowRoot.querySelector("video").dataset.fitMode,
           mirrored: preview.shadowRoot.querySelector("video").dataset.mirrored,
@@ -165,6 +206,22 @@
         },
         canvas: legacyCanvas
       };
+
+      function sampleCanvas(canvas) {
+        const sample = document.createElement("canvas");
+        sample.width = canvas.width;
+        sample.height = canvas.height;
+        const context = sample.getContext("2d", { willReadFrequently: true });
+        context.drawImage(canvas, 0, 0);
+        const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
+        let nonTransparent = 0;
+        let partialAlpha = 0;
+        for (let index = 3; index < pixels.length; index += 4) {
+          if (pixels[index] > 0) nonTransparent += 1;
+          if (pixels[index] > 0 && pixels[index] < 255) partialAlpha += 1;
+        }
+        return { nonTransparent, partialAlpha };
+      }
 
       function describeCanvas(element) {
         const canvas = element.shadowRoot.querySelector("canvas");
