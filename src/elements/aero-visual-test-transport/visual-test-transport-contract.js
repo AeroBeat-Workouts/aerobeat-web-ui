@@ -2,18 +2,41 @@
 
 /** Maximum accepted Visual Test duration: 24 hours in milliseconds. */
 export const maximumVisualTestDurationMs = 86_400_000;
+/** Default bounded Music/Sound volume. */
+export const defaultVisualTestVolume = 0.5;
+/** Native volume range increment. */
+export const visualTestVolumeStep = 0.01;
+/** Inclusive magnetic distance from 0, 0.5, and 1. */
+export const visualTestVolumeSnapThreshold = 0.04;
+const visualTestVolumeAnchors = Object.freeze([0, 0.5, 1]);
 
 /**
  * @typedef {Readonly<{
  *   active: boolean,
  *   playing: boolean,
  *   currentMs: number,
- *   durationMs: number
+ *   durationMs: number,
+ *   musicVolume: number,
+ *   soundVolume: number
  * }>} AeroVisualTestTransportSnapshot
  */
 
 /** @type {AeroVisualTestTransportSnapshot} */
-export const defaultVisualTestTransportSnapshot = Object.freeze({ active: false, playing: false, currentMs: 0, durationMs: 0 });
+export const defaultVisualTestTransportSnapshot = Object.freeze({ active: false, playing: false, currentMs: 0, durationMs: 0, musicVolume: defaultVisualTestVolume, soundVolume: defaultVisualTestVolume });
+
+/**
+ * Clamps one finite scalar to the native 0..1/0.01 range and applies an
+ * inclusive magnetic snap within 0.04 of 0, 0.5, or 1. Invalid values reject.
+ *
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function snapVisualTestVolume(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const bounded = Math.min(1, Math.max(0, value));
+  for (const anchor of visualTestVolumeAnchors) if (Math.abs(bounded - anchor) <= visualTestVolumeSnapThreshold + Number.EPSILON) return anchor;
+  return Number((Math.round(bounded / visualTestVolumeStep) * visualTestVolumeStep).toFixed(2));
+}
 
 /**
  * Narrows the exact public transport snapshot without invoking accessors or retaining
@@ -23,15 +46,17 @@ export const defaultVisualTestTransportSnapshot = Object.freeze({ active: false,
  * @returns {AeroVisualTestTransportSnapshot}
  */
 export function normalizeVisualTestTransportSnapshot(value) {
-  if (!isExactDataRecord(value, ["active", "playing", "currentMs", "durationMs"])) return defaultVisualTestTransportSnapshot;
+  if (!isExactDataRecord(value, ["active", "playing", "currentMs", "durationMs", "musicVolume", "soundVolume"])) return defaultVisualTestTransportSnapshot;
   const active = ownDataValue(value, "active");
   const playing = ownDataValue(value, "playing");
   const currentMs = ownDataValue(value, "currentMs");
   const durationMs = ownDataValue(value, "durationMs");
-  if (typeof active !== "boolean" || typeof playing !== "boolean" || !isFiniteNonNegativeNumber(currentMs) || !isFiniteNonNegativeNumber(durationMs)) return defaultVisualTestTransportSnapshot;
+  const musicVolume = snapVisualTestVolume(ownDataValue(value, "musicVolume"));
+  const soundVolume = snapVisualTestVolume(ownDataValue(value, "soundVolume"));
+  if (typeof active !== "boolean" || typeof playing !== "boolean" || !isFiniteNonNegativeNumber(currentMs) || !isFiniteNonNegativeNumber(durationMs) || musicVolume === null || soundVolume === null) return defaultVisualTestTransportSnapshot;
   const boundedDurationMs = Math.min(maximumVisualTestDurationMs, Math.round(durationMs));
   const boundedCurrentMs = Math.min(boundedDurationMs, Math.round(currentMs));
-  return Object.freeze({ active, playing, currentMs: boundedCurrentMs, durationMs: boundedDurationMs });
+  return Object.freeze({ active, playing, currentMs: boundedCurrentMs, durationMs: boundedDurationMs, musicVolume, soundVolume });
 }
 
 /**

@@ -63,6 +63,15 @@ try {
   // Repos without testbed scenes have nothing to pair.
 }
 
+try {
+  const transport = readFileSync("src/elements/aero-visual-test-transport/aero-visual-test-transport.js", "utf8");
+  for (const role of ["volume-toggle", "music-volume", "sound-volume"]) if (!transport.includes(`data-role=\"${role}\"`)) failures.push(`aero-visual-test-transport: missing named ${role} control`);
+  for (const contract of ["aria-controls=\"volume-popover\"", "aria-orientation=\"vertical\"", "role=\"dialog\"", "Music", "Sound"]) if (!transport.includes(contract)) failures.push(`aero-visual-test-transport: missing accessible volume contract ${contract}`);
+  for (const forbidden of ["localStorage", "sessionStorage", "AudioContext", "createGain"]) if (transport.includes(forbidden)) failures.push(`aero-visual-test-transport: UI must not own ${forbidden}`);
+} catch {
+  failures.push("aero-visual-test-transport: component source is missing");
+}
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);

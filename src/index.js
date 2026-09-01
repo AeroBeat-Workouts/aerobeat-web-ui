@@ -34,9 +34,13 @@ export {
   AeroVisualTestTransport,
   aeroVisualTestTransportElementName,
   defaultVisualTestTransportSnapshot,
+  defaultVisualTestVolume,
   defineAeroVisualTestTransport,
   formatVisualTestTimecode,
-  normalizeVisualTestTransportSnapshot
+  normalizeVisualTestTransportSnapshot,
+  snapVisualTestVolume,
+  visualTestVolumeSnapThreshold,
+  visualTestVolumeStep
 } from "./elements/aero-visual-test-transport/aero-visual-test-transport.js";
 export {
   AeroBackgroundEnvironment,

@@ -29,13 +29,18 @@ try {
   const initial = await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
     const root = host?.shadowRoot;
-    const button = root?.querySelector("button");
-    const range = root?.querySelector("input[type='range']");
+    const button = root?.querySelector("button[data-role='play-pause']");
+    const range = root?.querySelector("input[data-role='timeline']");
     const timecode = root?.querySelector("time");
-    if (!(host instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(range instanceof HTMLInputElement) || !(timecode instanceof HTMLTimeElement)) return null;
+    const volumeButton = root?.querySelector("button[data-role='volume-toggle']");
+    const music = root?.querySelector("input[data-role='music-volume']");
+    const sound = root?.querySelector("input[data-role='sound-volume']");
+    const popover = root?.querySelector(".volume-popover");
+    if (!(host instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(range instanceof HTMLInputElement) || !(timecode instanceof HTMLTimeElement) || !(volumeButton instanceof HTMLButtonElement) || !(music instanceof HTMLInputElement) || !(sound instanceof HTMLInputElement) || !(popover instanceof HTMLElement)) return null;
     const buttonRect = button.getBoundingClientRect();
     const rangeRect = range.getBoundingClientRect();
     const timeRect = timecode.getBoundingClientRect();
+    const volumeRect = volumeButton.getBoundingClientRect();
     return {
       hidden: host.hidden,
       buttonText: button.textContent,
@@ -44,8 +49,14 @@ try {
       rangeMax: range.max,
       rangeText: range.getAttribute("aria-valuetext"),
       timecode: timecode.textContent,
-      controlHeights: [buttonRect.height, rangeRect.height],
-      order: buttonRect.right <= rangeRect.left && rangeRect.right <= timeRect.left,
+      volumeButtonName: volumeButton.getAttribute("aria-label"),
+      volumeExpanded: volumeButton.getAttribute("aria-expanded"),
+      volumeValues: [music.value, sound.value],
+      volumeBounds: [music.min, music.max, music.step, sound.min, sound.max, sound.step],
+      volumeOrientations: [music.getAttribute("aria-orientation"), sound.getAttribute("aria-orientation")],
+      popoverHidden: popover.hidden,
+      controlHeights: [buttonRect.height, rangeRect.height, volumeRect.height],
+      order: buttonRect.right <= rangeRect.left && rangeRect.right <= timeRect.left && timeRect.right <= volumeRect.left,
       reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
       snapshotFrozen: Object.isFrozen(host.transportSnapshot)
     };
@@ -53,8 +64,10 @@ try {
   assert(initial !== null && initial.hidden === false, "Active Visual Test transport was hidden.");
   assert(initial.buttonText === "Play" && initial.buttonName === "Play Visual Test", "Paused transport did not expose Play.");
   assert(initial.rangeValue === "65000" && initial.rangeMax === "180000" && initial.rangeText === "01:05" && initial.timecode === "01:05", "Initial range/timecode truth was incorrect.");
+  assert(initial.volumeButtonName === "Open volume controls" && initial.volumeExpanded === "false" && initial.popoverHidden && JSON.stringify(initial.volumeValues) === JSON.stringify(["0.5", "0.5"]), "Initial volume defaults/open state were incorrect.");
+  assert(JSON.stringify(initial.volumeBounds) === JSON.stringify(["0", "1", "0.01", "0", "1", "0.01"]) && initial.volumeOrientations.every((value) => value === "vertical"), "Native volume range bounds/orientation were incorrect.");
   assert(initial.controlHeights.every((height) => height >= 42), "Transport controls are smaller than 42px.");
-  assert(initial.order === true, "Play/range/timecode are not ordered left-to-right.");
+  assert(initial.order === true, "Play/range/timecode/volume are not ordered left-to-right.");
   assert(initial.reduced === true && initial.snapshotFrozen === true, "Reduced-motion or immutable-state contract failed.");
 
   await page.evaluate(() => {
@@ -68,9 +81,9 @@ try {
     });
   });
 
-  await page.locator("aero-visual-test-transport button").click();
-  await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.setSnapshot({ active: true, playing: true, currentMs: 65_000, durationMs: 180_000 }));
-  await page.locator("aero-visual-test-transport button").click();
+  await page.locator("aero-visual-test-transport button[data-role='play-pause']").click();
+  await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.setSnapshot({ active: true, playing: true, currentMs: 65_000, durationMs: 180_000, musicVolume: 0.5, soundVolume: 0.5 }));
+  await page.locator("aero-visual-test-transport button[data-role='play-pause']").click();
   const playPause = await page.evaluate(() => Reflect.get(window, "__aeroTransportIntents"));
   assert(playPause[0]?.type === "visual-test-play" && Object.keys(playPause[0].payload).length === 0, "Play intent was not empty and exact.");
   assert(playPause[1]?.type === "visual-test-pause" && Object.keys(playPause[1].payload).length === 0, "Pause intent was not empty and exact.");
@@ -80,7 +93,7 @@ try {
     const host = document.querySelector("aero-visual-test-transport");
     const range = host?.shadowRoot?.querySelector("input[type='range']");
     if (!host || !(range instanceof HTMLInputElement)) return null;
-    host.setSnapshot({ active: true, playing: true, currentMs: 65_000, durationMs: 180_000 });
+    host.setSnapshot({ active: true, playing: true, currentMs: 65_000, durationMs: 180_000, musicVolume: 0.5, soundVolume: 0.5 });
     range.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerType: "touch" }));
     range.value = "90000";
     range.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertReplacementText" }));
@@ -92,10 +105,55 @@ try {
   assert(scrubTail[0]?.type === "visual-test-pause" && Object.keys(scrubTail[0].payload).length === 0, "Scrub did not pause first with an empty intent.");
   assert(scrubTail[1]?.type === "visual-test-seek" && JSON.stringify(scrubTail[1].payload) === JSON.stringify({ milliseconds: 90_000 }), "Scrub seek intent was not the exact scalar milliseconds payload.");
 
+  const beforeVolumeCount = afterScrub.length;
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  const volume = await page.evaluate(() => {
+    const host = document.querySelector("aero-visual-test-transport");
+    const root = host?.shadowRoot;
+    const music = root?.querySelector("input[data-role='music-volume']");
+    const sound = root?.querySelector("input[data-role='sound-volume']");
+    const popover = root?.querySelector(".volume-popover");
+    const toggle = root?.querySelector("button[data-role='volume-toggle']");
+    if (!host || !(music instanceof HTMLInputElement) || !(sound instanceof HTMLInputElement) || !(popover instanceof HTMLElement) || !(toggle instanceof HTMLButtonElement)) return null;
+    const stableMusic = music;
+    host.setSnapshot({ active: true, playing: false, currentMs: 90_000, durationMs: 180_000, musicVolume: 0.37, soundVolume: 0.82 });
+    const focusStable = root?.activeElement === stableMusic && root?.querySelector("input[data-role='music-volume']") === stableMusic;
+    music.value = "0.46";
+    music.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertReplacementText" }));
+    sound.value = "0.73";
+    sound.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertReplacementText" }));
+    const musicRect = music.getBoundingClientRect();
+    const soundRect = sound.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const transportRect = root?.querySelector(".transport")?.getBoundingClientRect();
+    const outputs = [...root.querySelectorAll("output")].map((entry) => entry.textContent);
+    return { open: !popover.hidden, expanded: toggle.getAttribute("aria-expanded"), name: toggle.getAttribute("aria-label"), focused: root.activeElement === music, focusStable, values: [music.value, sound.value], texts: [music.getAttribute("aria-valuetext"), sound.getAttribute("aria-valuetext")], outputs, rangeRects: [musicRect, soundRect], popoverRect, transportRect, intents: Reflect.get(window, "__aeroTransportIntents") };
+  });
+  assert(volume?.open && volume.expanded === "true" && volume.name === "Close volume controls" && volume.focused && volume.focusStable, "Volume popover open/focus/stable-DOM contract failed.");
+  assert(JSON.stringify(volume.values) === JSON.stringify(["0.5", "0.73"]) && JSON.stringify(volume.texts) === JSON.stringify(["0.5", "0.7"]) && JSON.stringify(volume.outputs) === JSON.stringify(["0.5", "0.7"]), "Volume snapping/value labels were incorrect.");
+  assert(volume.rangeRects.every((rect) => rect.width >= 44 && rect.height >= 44) && volume.popoverRect.left >= 0 && volume.popoverRect.right <= 390 && volume.popoverRect.bottom <= volume.transportRect.top, "Volume hit areas/popover placement were invalid.");
+  const volumeTail = volume.intents.slice(-2);
+  assert(volume.intents.length === beforeVolumeCount + 2, "Volume button implicitly emitted an intent or muted playback.");
+  assert(volumeTail[0]?.type === "visual-test-music-volume" && JSON.stringify(volumeTail[0].payload) === JSON.stringify({ volume: 0.5 }), "Music intent was not exact snapped scalar volume.");
+  assert(volumeTail[1]?.type === "visual-test-sound-volume" && JSON.stringify(volumeTail[1].payload) === JSON.stringify({ volume: 0.73 }), "Sound intent was not exact fine scalar volume.");
+
+  await page.locator("main").click({ position: { x: 20, y: 20 } });
+  const outsideClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
+  assert(outsideClosed === true, "Outside pointer/click did not close volume controls.");
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  await page.keyboard.press("Escape");
+  const escapeClosed = await page.evaluate(() => {
+    const root = document.querySelector("aero-visual-test-transport")?.shadowRoot;
+    const button = root?.querySelector("button[data-role='volume-toggle']");
+    const popover = root?.querySelector(".volume-popover");
+    return { hidden: popover?.hasAttribute("hidden"), focusReturned: root?.activeElement === button };
+  });
+  assert(escapeClosed.hidden && escapeClosed.focusReturned, "Escape did not close volume controls and return focus.");
+
   await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
-    host?.setSnapshot({ active: true, playing: false, currentMs: 10_000, durationMs: 20_000 });
-    const range = host?.shadowRoot?.querySelector("input[type='range']");
+    host?.setSnapshot({ active: true, playing: false, currentMs: 10_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
+    const range = host?.shadowRoot?.querySelector("input[data-role='timeline']");
     if (range instanceof HTMLInputElement) range.focus();
   });
   await page.keyboard.press("ArrowRight");
@@ -111,42 +169,49 @@ try {
   const stateBoundary = await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
     if (!host) return null;
-    const mutable = { active: true, playing: false, currentMs: 99_999, durationMs: 12_000 };
+    const mutable = { active: true, playing: false, currentMs: 99_999, durationMs: 12_000, musicVolume: 0.5, soundVolume: 0.5 };
     host.setSnapshot(mutable);
     mutable.currentMs = 0;
     const clamped = { hidden: host.hidden, currentMs: host.transportSnapshot.currentMs, text: host.shadowRoot?.querySelector("time")?.textContent };
-    host.setSnapshot({ active: false, playing: false, currentMs: 0, durationMs: 12_000 });
+    host.shadowRoot?.querySelector("button[data-role='volume-toggle']")?.click();
+    host.setSnapshot({ active: false, playing: false, currentMs: 0, durationMs: 12_000, musicVolume: 0.5, soundVolume: 0.5 });
     const inactiveHidden = host.hidden;
+    const volumeClosedOnHide = host.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden");
     let getterCalls = 0;
-    const hostile = { active: true, playing: false, currentMs: 1 };
-    Object.defineProperty(hostile, "durationMs", { enumerable: true, get() { getterCalls += 1; return 12_000; } });
+    const hostile = { active: true, playing: false, currentMs: 1, durationMs: 12_000, musicVolume: 0.5 };
+    Object.defineProperty(hostile, "soundVolume", { enumerable: true, get() { getterCalls += 1; return 0.5; } });
     host.setSnapshot(hostile);
-    return { clamped, inactiveHidden, getterCalls, hostileHidden: host.hidden, exactKeys: Object.keys(host.transportSnapshot).sort().join(",") };
+    return { clamped, inactiveHidden, volumeClosedOnHide, getterCalls, hostileHidden: host.hidden, exactKeys: Object.keys(host.transportSnapshot).sort().join(",") };
   });
   assert(stateBoundary?.clamped.currentMs === 12_000 && stateBoundary.clamped.text === "00:12", "State did not copy/clamp current time.");
-  assert(stateBoundary.inactiveHidden === true, "Transport remained visible outside Visual Test.");
+  assert(stateBoundary.inactiveHidden === true && stateBoundary.volumeClosedOnHide === true, "Transport/popover remained visible outside Visual Test.");
   assert(stateBoundary.getterCalls === 0 && stateBoundary.hostileHidden === true, "Accessor-bearing state was executed or retained.");
-  assert(stateBoundary.exactKeys === "active,currentMs,durationMs,playing", "Public transport state has an unexpected field.");
+  assert(stateBoundary.exactKeys === "active,currentMs,durationMs,musicVolume,playing,soundVolume", "Public transport state has an unexpected field.");
 
   const lifecycle = await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
     if (!host) return null;
-    host.setSnapshot({ active: true, playing: false, currentMs: 0, durationMs: 20_000 });
+    host.setSnapshot({ active: true, playing: false, currentMs: 0, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
     let count = 0;
     host.addEventListener("aero:ui:intent", () => { count += 1; });
-    const detachedButton = host.shadowRoot?.querySelector("button");
+    const detachedButton = host.shadowRoot?.querySelector("button[data-role='play-pause']");
+    const detachedVolume = host.shadowRoot?.querySelector("button[data-role='volume-toggle']");
+    detachedVolume?.click();
+    const openBeforeDetach = !host.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden");
     host.remove();
     detachedButton?.click();
+    detachedVolume?.click();
+    const closedOnDetach = host.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden");
     const detachedCount = count;
     document.querySelector("main")?.append(host);
-    host.shadowRoot?.querySelector("button")?.click();
-    host.setSnapshot({ active: true, playing: false, currentMs: 1_000, durationMs: 20_000 });
+    host.shadowRoot?.querySelector("button[data-role='play-pause']")?.click();
+    host.setSnapshot({ active: true, playing: false, currentMs: 1_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
     const range = host.shadowRoot?.querySelector("input[type='range']");
     range?.focus();
-    host.setSnapshot({ active: true, playing: false, currentMs: 2_000, durationMs: 20_000 });
-    return { detachedCount, reconnectCount: count, focusStable: host.shadowRoot?.activeElement === range };
+    host.setSnapshot({ active: true, playing: false, currentMs: 2_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
+    return { openBeforeDetach, closedOnDetach, detachedCount, reconnectCount: count, focusStable: host.shadowRoot?.activeElement === range };
   });
-  assert(lifecycle?.detachedCount === 0 && lifecycle.reconnectCount === 1, "Disconnect/reconnect duplicated or retained listeners.");
+  assert(lifecycle?.openBeforeDetach && lifecycle.closedOnDetach && lifecycle.detachedCount === 0 && lifecycle.reconnectCount === 1, "Disconnect/reconnect retained popover/listeners or duplicated intents.");
   assert(lifecycle.focusStable === true, "Snapshot update replaced or blurred the focused timeline.");
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
@@ -157,17 +222,28 @@ try {
       host.style.setProperty("--aero-test-safe-area-bottom", "17px");
       host.style.setProperty("--aero-test-safe-area-left", "13px");
       host.style.setProperty("--aero-test-safe-area-right", "11px");
-      host.setSnapshot({ active: true, playing: false, currentMs: 2_000, durationMs: 20_000 });
+      host.setSnapshot({ active: true, playing: false, currentMs: 2_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
       const bar = host.shadowRoot?.querySelector(".transport");
-      if (!(bar instanceof HTMLElement)) return null;
+      const toggle = host.shadowRoot?.querySelector("button[data-role='volume-toggle']");
+      const time = host.shadowRoot?.querySelector("time");
+      if (!(bar instanceof HTMLElement) || !(toggle instanceof HTMLButtonElement) || !(time instanceof HTMLTimeElement)) return null;
+      if (toggle.getAttribute("aria-expanded") === "true") toggle.click();
+      toggle.click();
+      const popover = host.shadowRoot?.querySelector(".volume-popover");
+      const ranges = [...host.shadowRoot.querySelectorAll("input.volume-range")];
+      if (!(popover instanceof HTMLElement) || ranges.some((entry) => !(entry instanceof HTMLInputElement))) return null;
       const hostRect = host.getBoundingClientRect();
       const barRect = bar.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const toggleRect = toggle.getBoundingClientRect();
+      const timeRect = time.getBoundingClientRect();
       const style = getComputedStyle(bar);
-      return { viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight) };
+      return { viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight), timeBeforeVolume: timeRect.right <= toggleRect.left, toggleSize: [toggleRect.width,toggleRect.height], popoverWithin: popoverRect.left >= 0 && popoverRect.right <= innerWidth && popoverRect.top >= 0 && popoverRect.bottom <= barRect.top, rangeSizes: ranges.map((entry) => { const rect=entry.getBoundingClientRect(); return [rect.width,rect.height]; }) };
     });
     assert(layout !== null && layout.bodyWidth <= layout.viewportWidth && layout.hostLeft >= 0 && layout.hostRight <= layout.viewportWidth + 0.5, `Transport overflowed ${viewport.width}x${viewport.height}.`);
     assert(Math.abs(layout.barBottom - layout.viewportHeight) <= 0.5, `Transport did not stay bottom-aligned at ${viewport.width}x${viewport.height}.`);
     assert(layout.paddingBottom >= 17 && layout.paddingLeft >= 13 && layout.paddingRight >= 11, `Safe-area padding failed at ${viewport.width}x${viewport.height}.`);
+    assert(layout.timeBeforeVolume && layout.toggleSize.every((value) => value >= 44) && layout.popoverWithin && layout.rangeSizes.every(([width,height]) => width >= 44 && height >= 44), `Volume/timecode ordering, hit area, or popover bounds failed at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
   }
   await context.close();
 
