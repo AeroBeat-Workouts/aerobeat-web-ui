@@ -340,6 +340,12 @@ try {
     const librarySelectIntents = captured.filter((intent) => intent.type === "library-select").slice(beforeLibrarySelect);
     const musicInstancesIndependent = fallbackMapBrowser.shadowRoot?.querySelector("input:checked")?.value === "map-alpha" && fallbackLibrary.shadowRoot?.querySelector("input:checked")?.value === "package-alpha";
     const musicRadiosVisible = [currentMapBrowser, fallbackMapBrowser, currentLibrary, fallbackLibrary].flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]).every((radio) => { const style = getComputedStyle(radio); const bounds = radio.getBoundingClientRect(); return style.appearance !== "none" && style.visibility === "visible" && bounds.width >= 42 && bounds.height >= 42; });
+    const stableMapControl = currentMapBrowser.shadowRoot?.querySelector("input[value='map-alpha']"); stableMapControl?.focus(); currentMapBrowser.setSnapshot(structuredClone(currentMapBrowser.presenterSnapshot));
+    const equivalentMapIdentityStable = stableMapControl === currentMapBrowser.shadowRoot?.querySelector("input[value='map-alpha']") && stableMapControl?.isConnected === true && currentMapBrowser.shadowRoot?.activeElement === stableMapControl;
+    const stableLibraryControl = currentLibrary.shadowRoot?.querySelector("input[value='package-alpha']"); stableLibraryControl?.focus(); currentLibrary.setSnapshot(structuredClone(currentLibrary.presenterSnapshot));
+    const equivalentLibraryIdentityStable = stableLibraryControl === currentLibrary.shadowRoot?.querySelector("input[value='package-alpha']") && stableLibraryControl?.isConnected === true && currentLibrary.shadowRoot?.activeElement === stableLibraryControl;
+    const stableGameplayControl = gameplaySelector.shadowRoot?.querySelector("input[value='boxing_spatial_grid_v1']"); stableGameplayControl?.focus(); gameplaySelector.setSnapshot(structuredClone(gameplaySelector.presenterSnapshot));
+    const equivalentGameplayIdentityStable = stableGameplayControl === gameplaySelector.shadowRoot?.querySelector("input[value='boxing_spatial_grid_v1']") && stableGameplayControl?.isConnected === true && gameplaySelector.shadowRoot?.activeElement === stableGameplayControl;
 
     const module = await import("/src/index.js");
     module.defineAeroUiElements();
@@ -464,6 +470,9 @@ try {
       librarySelectIntents,
       musicInstancesIndependent,
       musicRadiosVisible,
+      equivalentMapIdentityStable,
+      equivalentLibraryIdentityStable,
+      equivalentGameplayIdentityStable,
       idempotentDefinition,
       scalarPayloadsOnly,
       compactAttributeRoundtrip,
@@ -558,6 +567,7 @@ try {
   assert(adversarial.mapSelectIntents.length === 1 && adversarial.mapSelectIntents[0].payload.mapId === "map-alpha" && adversarial.librarySelectIntents.length === 1 && adversarial.librarySelectIntents[0].payload.packageId === "package-alpha", "Music radio intents changed scalar IDs or emitted more than once.");
   assert(adversarial.mapFocusPreserved && adversarial.libraryFocusPreserved && adversarial.mapReconnectIntentCount === 1 && adversarial.musicInstancesIndependent, "Music selection focus, reconnect, or multi-instance isolation regressed.");
   assert(adversarial.musicRadiosVisible, "Music choices were not visibly native 42px radio inputs.");
+  assert(adversarial.equivalentMapIdentityStable && adversarial.equivalentLibraryIdentityStable && adversarial.equivalentGameplayIdentityStable, "Equivalent presenter snapshots replaced native controls or lost focus.");
   assert(adversarial.idempotentDefinition && adversarial.scalarPayloadsOnly, "Definition or scalar-only event contracts failed.");
   assert(adversarial.compactAttributeRoundtrip && adversarial.compactHeadingsSuppressed && adversarial.compactMetadataSuppressed, "Compact property/attribute did not visually suppress only designated headings and metadata.");
   assert(adversarial.compactControlsActionable, "Compact mode hid or undersized an actionable control.");

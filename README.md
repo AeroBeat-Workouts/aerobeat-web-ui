@@ -34,7 +34,7 @@ Existing reusable primitives remain exported: `aero-button`, `aero-select`, `aer
 
 ## Lifecycle, accessibility and embedding
 
-- Product presenters attach DOM/listeners only while connected and remove delegated listeners on disconnect; reconnect installs one listener set. Calibration composition preserves the same media preview and renderer surface across snapshot updates.
+- Product presenters attach DOM/listeners only while connected and remove delegated listeners on disconnect; reconnect installs one listener set. Applying exact equivalent narrowed snapshot data is idempotent and preserves the same native controls and focus; genuinely changed snapshots retain existing identity-based focus restoration. Calibration composition preserves the same media preview and renderer surface across snapshot updates.
 - Components fill their assigned parent and never assume `100vh`, body ownership, routes, or browser history.
 - Controls use native keyboard semantics, visible focus, touch-sized targets, labels and live regions. Prototype radios use roving arrow-key selection; tracking pause moves focus into its alert dialog and restores it afterward. Desktop, 390px portrait and phone-landscape layouts are exercised in Chromium.
 - Platform reduced-motion preferences suppress component transitions; gameplay animation policy remains with renderer/theme owners.

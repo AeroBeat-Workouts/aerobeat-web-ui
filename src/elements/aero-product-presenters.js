@@ -107,7 +107,9 @@ class AeroPresenterElement extends HTMLElement {
 
   /** @param {AeroPresenterSnapshot} snapshot */
   setSnapshot(snapshot) {
-    this.presenterSnapshot = narrowAeroPresenterSnapshot(snapshot);
+    const narrowed = narrowAeroPresenterSnapshot(snapshot);
+    if (equivalentSnapshotData(this.presenterSnapshot, narrowed)) return;
+    this.presenterSnapshot = narrowed;
     this.render();
   }
 
@@ -299,9 +301,11 @@ export class AeroContentLibrary extends AeroPresenterElement {
 
   /** A host snapshot settles any optimistic compact song/difficulty selection. @param {AeroPresenterSnapshot} snapshot */
   setSnapshot(snapshot) {
+    const narrowed = narrowAeroPresenterSnapshot(snapshot);
+    if (equivalentSnapshotData(this.presenterSnapshot, narrowed)) return;
     this.pendingSelectedCollectionId = "";
     this.pendingSelectedPackageId = "";
-    super.setSnapshot(snapshot);
+    super.setSnapshot(narrowed);
   }
 
   /** Compact changes the product composition, while removing it restores the default development markup. @param {string} name @param {string | null} oldValue @param {string | null} newValue */
@@ -730,6 +734,14 @@ function isPlainRecord(value) {
 export function narrowAeroPresenterSnapshot(value) {
   const narrowed = narrowSnapshotValue(value, new Set(), 0);
   return isPlainRecord(narrowed) ? narrowed : Object.freeze({});
+}
+/** @param {unknown} left @param {unknown} right @returns {boolean} */
+function equivalentSnapshotData(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => equivalentSnapshotData(value, right[index]));
+  if (!isPlainRecord(left) || !isPlainRecord(right)) return false;
+  const leftKeys = Object.keys(left); const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => Object.hasOwn(right, key) && equivalentSnapshotData(left[key], right[key]));
 }
 /** @param {unknown} value @param {Set<object>} seen @param {number} depth @returns {unknown} */
 function narrowSnapshotValue(value, seen, depth) {
