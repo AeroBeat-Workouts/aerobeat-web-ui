@@ -118,6 +118,7 @@ export class AeroVisualTestTransport extends HTMLElement {
           position: absolute;
           z-index: 1;
         }
+        .volume-popover[hidden] { display: none; }
         .volume-control {
           align-items: center;
           display: grid;

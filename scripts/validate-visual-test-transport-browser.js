@@ -41,6 +41,7 @@ try {
     const rangeRect = range.getBoundingClientRect();
     const timeRect = timecode.getBoundingClientRect();
     const volumeRect = volumeButton.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
     return {
       hidden: host.hidden,
       buttonText: button.textContent,
@@ -55,6 +56,8 @@ try {
       volumeBounds: [music.min, music.max, music.step, sound.min, sound.max, sound.step],
       volumeOrientations: [music.getAttribute("aria-orientation"), sound.getAttribute("aria-orientation")],
       popoverHidden: popover.hidden,
+      popoverDisplay: getComputedStyle(popover).display,
+      popoverGeometry: [popoverRect.width, popoverRect.height, popover.getClientRects().length],
       controlHeights: [buttonRect.height, rangeRect.height, volumeRect.height],
       order: buttonRect.right <= rangeRect.left && rangeRect.right <= timeRect.left && timeRect.right <= volumeRect.left,
       reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -65,6 +68,7 @@ try {
   assert(initial.buttonText === "Play" && initial.buttonName === "Play Visual Test", "Paused transport did not expose Play.");
   assert(initial.rangeValue === "65000" && initial.rangeMax === "180000" && initial.rangeText === "01:05" && initial.timecode === "01:05", "Initial range/timecode truth was incorrect.");
   assert(initial.volumeButtonName === "Open volume controls" && initial.volumeExpanded === "false" && initial.popoverHidden && JSON.stringify(initial.volumeValues) === JSON.stringify(["0.5", "0.5"]), "Initial volume defaults/open state were incorrect.");
+  assert(initial.popoverDisplay === "none" && initial.popoverGeometry.every((value) => value === 0), `Closed volume popover rendered by default: ${JSON.stringify({ display: initial.popoverDisplay, geometry: initial.popoverGeometry })}`);
   assert(JSON.stringify(initial.volumeBounds) === JSON.stringify(["0", "1", "0.01", "0", "1", "0.01"]) && initial.volumeOrientations.every((value) => value === "vertical"), "Native volume range bounds/orientation were incorrect.");
   assert(initial.controlHeights.every((height) => height >= 42), "Transport controls are smaller than 42px.");
   assert(initial.order === true, "Play/range/timecode/volume are not ordered left-to-right.");
@@ -129,9 +133,9 @@ try {
     const outputElements = [...root.querySelectorAll("output")];
     const outputRects = outputElements.map((entry) => entry.getBoundingClientRect());
     const outputs = outputElements.map((entry) => entry.textContent);
-    return { open: !popover.hidden, expanded: toggle.getAttribute("aria-expanded"), name: toggle.getAttribute("aria-label"), focused: root.activeElement === music, focusStable, values: [music.value, sound.value], labels: [music.getAttribute("aria-label"), sound.getAttribute("aria-label")], texts: [music.getAttribute("aria-valuetext"), sound.getAttribute("aria-valuetext")], outputs, rangeRects: [musicRect, soundRect], outputRects, popoverRect, transportRect, intents: Reflect.get(window, "__aeroTransportIntents") };
+    return { open: !popover.hidden, display: getComputedStyle(popover).display, rendered: popoverRect.width > 0 && popoverRect.height > 0 && popover.getClientRects().length > 0, expanded: toggle.getAttribute("aria-expanded"), name: toggle.getAttribute("aria-label"), focused: root.activeElement === music, focusStable, values: [music.value, sound.value], labels: [music.getAttribute("aria-label"), sound.getAttribute("aria-label")], texts: [music.getAttribute("aria-valuetext"), sound.getAttribute("aria-valuetext")], outputs, rangeRects: [musicRect, soundRect], outputRects, popoverRect, transportRect, intents: Reflect.get(window, "__aeroTransportIntents") };
   });
-  assert(volume?.open && volume.expanded === "true" && volume.name === "Close volume controls" && volume.focused && volume.focusStable, "Volume popover open/focus/stable-DOM contract failed.");
+  assert(volume?.open && volume.display === "grid" && volume.rendered && volume.expanded === "true" && volume.name === "Close volume controls" && volume.focused && volume.focusStable, "Volume popover open/rendering/focus/stable-DOM contract failed.");
   assert(JSON.stringify(volume.values) === JSON.stringify(["0.5", "0.73"]) && JSON.stringify(volume.labels) === JSON.stringify(["Music volume", "Sound volume"]) && JSON.stringify(volume.texts) === JSON.stringify(["0.5", "0.7"]) && JSON.stringify(volume.outputs) === JSON.stringify(["0.5", "0.7"]), "Volume snapping/accessibility/value labels were incorrect.");
   assert(volume.rangeRects.every((rect) => rect.width >= 44 && rect.height >= 44) && volume.rangeRects[0].right <= volume.rangeRects[1].left && volume.outputRects.every((rect, index) => rect.bottom <= volume.rangeRects[index].top) && volume.popoverRect.left >= 0 && volume.popoverRect.right <= 390 && volume.popoverRect.bottom <= volume.transportRect.top, "Volume ordering, value-above-track, hit areas, or popover placement were invalid.");
   const volumeTail = volume.intents.slice(-2);
@@ -145,19 +149,30 @@ try {
     const root = document.querySelector("aero-visual-test-transport")?.shadowRoot;
     const button = root?.querySelector("button[data-role='volume-toggle']");
     const popover = root?.querySelector(".volume-popover");
-    return { hidden: popover?.hasAttribute("hidden"), focusReturned: root?.activeElement === button, intentCount: Reflect.get(window, "__aeroTransportIntents")?.length };
+    const rect = popover?.getBoundingClientRect();
+    return { hidden: popover?.hasAttribute("hidden"), display: popover instanceof HTMLElement ? getComputedStyle(popover).display : null, geometry: rect ? [rect.width, rect.height, popover?.getClientRects().length] : null, focusReturned: root?.activeElement === button, intentCount: Reflect.get(window, "__aeroTransportIntents")?.length };
   });
-  assert(buttonClosed.hidden && buttonClosed.focusReturned && buttonClosed.intentCount === beforeVolumeCount + 2, "Volume button close changed mix, emitted an intent, or failed focus restoration.");
+  assert(buttonClosed.hidden && buttonClosed.display === "none" && buttonClosed.geometry?.every((value) => value === 0) && buttonClosed.focusReturned && buttonClosed.intentCount === beforeVolumeCount + 2, `Volume button close changed mix, emitted an intent, failed focus restoration, or remained rendered: ${JSON.stringify(buttonClosed)}`);
 
   await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
   await page.evaluate(() => document.querySelector("main")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerType: "mouse" })));
-  const pointerClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
-  assert(pointerClosed === true, "Outside composed pointerdown did not close volume controls.");
+  const pointerClosed = await page.evaluate(() => {
+    const popover = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover");
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, geometry: [rect.width, rect.height, popover.getClientRects().length] };
+  });
+  assert(pointerClosed?.hidden && pointerClosed.display === "none" && pointerClosed.geometry.every((value) => value === 0), `Outside composed pointerdown did not remove volume controls from rendering: ${JSON.stringify(pointerClosed)}`);
 
   await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
   await page.evaluate(() => document.querySelector("main")?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })));
-  const clickClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
-  assert(clickClosed === true, "Outside composed click did not close volume controls.");
+  const clickClosed = await page.evaluate(() => {
+    const popover = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover");
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, geometry: [rect.width, rect.height, popover.getClientRects().length] };
+  });
+  assert(clickClosed?.hidden && clickClosed.display === "none" && clickClosed.geometry.every((value) => value === 0), `Outside composed click did not remove volume controls from rendering: ${JSON.stringify(clickClosed)}`);
 
   await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
   await page.keyboard.press("Escape");
@@ -165,9 +180,11 @@ try {
     const root = document.querySelector("aero-visual-test-transport")?.shadowRoot;
     const button = root?.querySelector("button[data-role='volume-toggle']");
     const popover = root?.querySelector(".volume-popover");
-    return { hidden: popover?.hasAttribute("hidden"), focusReturned: root?.activeElement === button };
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, geometry: [rect.width, rect.height, popover.getClientRects().length], focusReturned: root?.activeElement === button };
   });
-  assert(escapeClosed.hidden && escapeClosed.focusReturned, "Escape did not close volume controls and return focus.");
+  assert(escapeClosed?.hidden && escapeClosed.display === "none" && escapeClosed.geometry.every((value) => value === 0) && escapeClosed.focusReturned, `Escape did not remove volume controls from rendering and return focus: ${JSON.stringify(escapeClosed)}`);
 
   await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
   const hiddenClosed = await page.evaluate(() => {
@@ -177,11 +194,13 @@ try {
     const popover = root?.querySelector(".volume-popover");
     if (!(host instanceof HTMLElement)) return null;
     host.hidden = true;
-    const hiddenState = { hidden: popover?.hasAttribute("hidden"), expanded: button?.getAttribute("aria-expanded") };
+    const hiddenRect = popover?.getBoundingClientRect();
+    const hiddenState = { hidden: popover?.hasAttribute("hidden"), display: popover instanceof HTMLElement ? getComputedStyle(popover).display : null, geometry: hiddenRect ? [hiddenRect.width, hiddenRect.height, popover?.getClientRects().length] : null, expanded: button?.getAttribute("aria-expanded") };
     host.hidden = false;
-    return { ...hiddenState, staysClosed: popover?.hasAttribute("hidden"), staysCollapsed: button?.getAttribute("aria-expanded") };
+    const shownRect = popover?.getBoundingClientRect();
+    return { ...hiddenState, staysClosed: popover?.hasAttribute("hidden"), staysDisplayNone: popover instanceof HTMLElement && getComputedStyle(popover).display === "none", staysGeometryZero: shownRect ? [shownRect.width, shownRect.height, popover?.getClientRects().length].every((value) => value === 0) : false, staysCollapsed: button?.getAttribute("aria-expanded") };
   });
-  assert(hiddenClosed?.hidden && hiddenClosed.expanded === "false" && hiddenClosed.staysClosed && hiddenClosed.staysCollapsed === "false", "External hidden lifecycle did not close and reset the volume popover.");
+  assert(hiddenClosed?.hidden && hiddenClosed.display === "none" && hiddenClosed.geometry?.every((value) => value === 0) && hiddenClosed.expanded === "false" && hiddenClosed.staysClosed && hiddenClosed.staysDisplayNone && hiddenClosed.staysGeometryZero && hiddenClosed.staysCollapsed === "false", `External hidden lifecycle did not close and remove the volume popover from rendering: ${JSON.stringify(hiddenClosed)}`);
 
   await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
@@ -225,15 +244,19 @@ try {
     host.shadowRoot?.querySelector("button[data-role='volume-toggle']")?.click();
     host.setSnapshot({ active: false, playing: false, currentMs: 0, durationMs: 12_000, musicVolume: 0.5, soundVolume: 0.5 });
     const inactiveHidden = host.hidden;
-    const volumeClosedOnHide = host.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden");
+    const inactivePopover = host.shadowRoot?.querySelector(".volume-popover");
+    const inactiveRect = inactivePopover?.getBoundingClientRect();
+    const volumeClosedOnHide = inactivePopover?.hasAttribute("hidden");
+    const inactivePopoverDisplay = inactivePopover instanceof HTMLElement ? getComputedStyle(inactivePopover).display : null;
+    const inactivePopoverGeometry = inactiveRect ? [inactiveRect.width, inactiveRect.height, inactivePopover?.getClientRects().length] : null;
     let getterCalls = 0;
     const hostile = { active: true, playing: false, currentMs: 1, durationMs: 12_000, musicVolume: 0.5 };
     Object.defineProperty(hostile, "soundVolume", { enumerable: true, get() { getterCalls += 1; return 0.5; } });
     host.setSnapshot(hostile);
-    return { clamped, inactiveHidden, volumeClosedOnHide, getterCalls, hostileHidden: host.hidden, exactKeys: Object.keys(host.transportSnapshot).sort().join(",") };
+    return { clamped, inactiveHidden, volumeClosedOnHide, inactivePopoverDisplay, inactivePopoverGeometry, getterCalls, hostileHidden: host.hidden, exactKeys: Object.keys(host.transportSnapshot).sort().join(",") };
   });
   assert(stateBoundary?.clamped.currentMs === 12_000 && stateBoundary.clamped.text === "00:12", "State did not copy/clamp current time.");
-  assert(stateBoundary.inactiveHidden === true && stateBoundary.volumeClosedOnHide === true, "Transport/popover remained visible outside Visual Test.");
+  assert(stateBoundary.inactiveHidden === true && stateBoundary.volumeClosedOnHide === true && stateBoundary.inactivePopoverDisplay === "none" && stateBoundary.inactivePopoverGeometry?.every((value) => value === 0), `Transport/popover remained rendered outside Visual Test: ${JSON.stringify(stateBoundary)}`);
   assert(stateBoundary.getterCalls === 0 && stateBoundary.hostileHidden === true, "Accessor-bearing state was executed or retained.");
   assert(stateBoundary.exactKeys === "active,currentMs,durationMs,musicVolume,playing,soundVolume", "Public transport state has an unexpected field.");
 
@@ -250,17 +273,23 @@ try {
     host.remove();
     detachedButton?.click();
     detachedVolume?.click();
-    const closedOnDetach = host.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden");
+    const detachedPopover = host.shadowRoot?.querySelector(".volume-popover");
+    const detachedRect = detachedPopover?.getBoundingClientRect();
+    const closedOnDetach = detachedPopover?.hasAttribute("hidden");
+    const detachedGeometry = detachedRect ? [detachedRect.width, detachedRect.height, detachedPopover?.getClientRects().length] : null;
     const detachedCount = count;
     document.querySelector("main")?.append(host);
+    const reconnectedPopover = host.shadowRoot?.querySelector(".volume-popover");
+    const reconnectedRect = reconnectedPopover?.getBoundingClientRect();
+    const reconnectedClosedRendering = reconnectedPopover instanceof HTMLElement && reconnectedPopover.hidden && getComputedStyle(reconnectedPopover).display === "none" && reconnectedRect !== undefined && [reconnectedRect.width, reconnectedRect.height, reconnectedPopover.getClientRects().length].every((value) => value === 0);
     host.shadowRoot?.querySelector("button[data-role='play-pause']")?.click();
     host.setSnapshot({ active: true, playing: false, currentMs: 1_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
     const range = host.shadowRoot?.querySelector("input[type='range']");
     range?.focus();
     host.setSnapshot({ active: true, playing: false, currentMs: 2_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
-    return { openBeforeDetach, closedOnDetach, detachedCount, reconnectCount: count, focusStable: host.shadowRoot?.activeElement === range };
+    return { openBeforeDetach, closedOnDetach, detachedGeometry, reconnectedClosedRendering, detachedCount, reconnectCount: count, focusStable: host.shadowRoot?.activeElement === range };
   });
-  assert(lifecycle?.openBeforeDetach && lifecycle.closedOnDetach && lifecycle.detachedCount === 0 && lifecycle.reconnectCount === 1, "Disconnect/reconnect retained popover/listeners or duplicated intents.");
+  assert(lifecycle?.openBeforeDetach && lifecycle.closedOnDetach && lifecycle.detachedGeometry?.every((value) => value === 0) && lifecycle.reconnectedClosedRendering && lifecycle.detachedCount === 0 && lifecycle.reconnectCount === 1, `Disconnect/reconnect retained rendered popover/listeners or duplicated intents: ${JSON.stringify(lifecycle)}`);
   assert(lifecycle.focusStable === true, "Snapshot update replaced or blurred the focused timeline.");
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
@@ -304,6 +333,48 @@ try {
   const dprOne = await dprOnePage.evaluate(() => ({ dpr: devicePixelRatio, overflow: document.body.scrollWidth > document.documentElement.clientWidth }));
   assert(dprOne.dpr === 1 && dprOne.overflow === false, "DPR1 portrait transport layout failed.");
   await dprOneContext.close();
+
+  const iframeContext = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, reducedMotion: "reduce" });
+  const iframePage = await iframeContext.newPage();
+  iframePage.on("console", (message) => { if (message.type() === "warning" || message.type() === "error") consoleNoise.push(`${message.type()}: ${message.text()}`); });
+  iframePage.on("pageerror", (error) => pageErrors.push(error.message));
+  await iframePage.goto(`${url}.testbed/scenes/aero-visual-test-transport.scene.html`, { waitUntil: "networkidle" });
+  await iframePage.evaluate((sourceUrl) => {
+    document.body.replaceChildren();
+    const iframe = document.createElement("iframe");
+    iframe.id = "transport-iframe";
+    iframe.src = sourceUrl;
+    iframe.style.cssText = "border:0;display:block;height:100vh;width:100vw";
+    document.body.append(iframe);
+  }, `${url}.testbed/scenes/aero-visual-test-transport.scene.html`);
+  const iframeHandle = await iframePage.waitForSelector("#transport-iframe");
+  const transportFrame = await iframeHandle.contentFrame();
+  if (!transportFrame) throw new Error("Responsive transport iframe did not expose a frame.");
+  await transportFrame.waitForFunction(() => Boolean(customElements.get("aero-visual-test-transport")));
+  const iframeDefault = await transportFrame.evaluate(() => {
+    const popover = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover");
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, geometry: [rect.width, rect.height, popover.getClientRects().length], overflow: document.body.scrollWidth > document.documentElement.clientWidth };
+  });
+  assert(iframeDefault?.hidden && iframeDefault.display === "none" && iframeDefault.geometry.every((value) => value === 0) && !iframeDefault.overflow, `Responsive iframe default popover rendered while closed: ${JSON.stringify(iframeDefault)}`);
+  await transportFrame.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  const iframeOpen = await transportFrame.evaluate(() => {
+    const popover = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover");
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, rendered: rect.width > 0 && rect.height > 0 && popover.getClientRects().length > 0 };
+  });
+  assert(iframeOpen?.hidden === false && iframeOpen.display === "grid" && iframeOpen.rendered, `Responsive iframe popover did not render when opened: ${JSON.stringify(iframeOpen)}`);
+  await transportFrame.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  const iframeClosed = await transportFrame.evaluate(() => {
+    const popover = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover");
+    if (!(popover instanceof HTMLElement)) return null;
+    const rect = popover.getBoundingClientRect();
+    return { hidden: popover.hidden, display: getComputedStyle(popover).display, geometry: [rect.width, rect.height, popover.getClientRects().length] };
+  });
+  assert(iframeClosed?.hidden && iframeClosed.display === "none" && iframeClosed.geometry.every((value) => value === 0), `Responsive iframe popover remained rendered after button close: ${JSON.stringify(iframeClosed)}`);
+  await iframeContext.close();
 
   assert(consoleNoise.length === 0, `Transport validation emitted console noise: ${consoleNoise.join(" | ")}`);
   assert(pageErrors.length === 0, `Transport validation emitted page errors: ${pageErrors.join(" | ")}`);
