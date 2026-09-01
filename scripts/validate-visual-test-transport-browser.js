@@ -77,7 +77,7 @@ try {
     Reflect.set(window, "__aeroTransportIntents", intents);
     host.addEventListener("aero:ui:intent", (event) => {
       if (!(event instanceof CustomEvent)) return;
-      intents.push({ type: event.detail?.type, payload: event.detail?.payload, detailFrozen: Object.isFrozen(event.detail), payloadFrozen: Object.isFrozen(event.detail?.payload) });
+      intents.push({ type: event.detail?.type, payload: event.detail?.payload, detailFrozen: Object.isFrozen(event.detail), payloadFrozen: Object.isFrozen(event.detail?.payload), bubbles: event.bubbles, composed: event.composed });
     });
   });
 
@@ -87,7 +87,7 @@ try {
   const playPause = await page.evaluate(() => Reflect.get(window, "__aeroTransportIntents"));
   assert(playPause[0]?.type === "visual-test-play" && Object.keys(playPause[0].payload).length === 0, "Play intent was not empty and exact.");
   assert(playPause[1]?.type === "visual-test-pause" && Object.keys(playPause[1].payload).length === 0, "Pause intent was not empty and exact.");
-  assert(playPause.every((intent) => intent.detailFrozen && intent.payloadFrozen), "Transport intents are mutable.");
+  assert(playPause.every((intent) => intent.detailFrozen && intent.payloadFrozen && intent.bubbles && intent.composed), "Transport intents are mutable or do not cross the bubbling/composed boundary.");
 
   const scrub = await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
@@ -126,20 +126,39 @@ try {
     const soundRect = sound.getBoundingClientRect();
     const popoverRect = popover.getBoundingClientRect();
     const transportRect = root?.querySelector(".transport")?.getBoundingClientRect();
-    const outputs = [...root.querySelectorAll("output")].map((entry) => entry.textContent);
-    return { open: !popover.hidden, expanded: toggle.getAttribute("aria-expanded"), name: toggle.getAttribute("aria-label"), focused: root.activeElement === music, focusStable, values: [music.value, sound.value], texts: [music.getAttribute("aria-valuetext"), sound.getAttribute("aria-valuetext")], outputs, rangeRects: [musicRect, soundRect], popoverRect, transportRect, intents: Reflect.get(window, "__aeroTransportIntents") };
+    const outputElements = [...root.querySelectorAll("output")];
+    const outputRects = outputElements.map((entry) => entry.getBoundingClientRect());
+    const outputs = outputElements.map((entry) => entry.textContent);
+    return { open: !popover.hidden, expanded: toggle.getAttribute("aria-expanded"), name: toggle.getAttribute("aria-label"), focused: root.activeElement === music, focusStable, values: [music.value, sound.value], labels: [music.getAttribute("aria-label"), sound.getAttribute("aria-label")], texts: [music.getAttribute("aria-valuetext"), sound.getAttribute("aria-valuetext")], outputs, rangeRects: [musicRect, soundRect], outputRects, popoverRect, transportRect, intents: Reflect.get(window, "__aeroTransportIntents") };
   });
   assert(volume?.open && volume.expanded === "true" && volume.name === "Close volume controls" && volume.focused && volume.focusStable, "Volume popover open/focus/stable-DOM contract failed.");
-  assert(JSON.stringify(volume.values) === JSON.stringify(["0.5", "0.73"]) && JSON.stringify(volume.texts) === JSON.stringify(["0.5", "0.7"]) && JSON.stringify(volume.outputs) === JSON.stringify(["0.5", "0.7"]), "Volume snapping/value labels were incorrect.");
-  assert(volume.rangeRects.every((rect) => rect.width >= 44 && rect.height >= 44) && volume.popoverRect.left >= 0 && volume.popoverRect.right <= 390 && volume.popoverRect.bottom <= volume.transportRect.top, "Volume hit areas/popover placement were invalid.");
+  assert(JSON.stringify(volume.values) === JSON.stringify(["0.5", "0.73"]) && JSON.stringify(volume.labels) === JSON.stringify(["Music volume", "Sound volume"]) && JSON.stringify(volume.texts) === JSON.stringify(["0.5", "0.7"]) && JSON.stringify(volume.outputs) === JSON.stringify(["0.5", "0.7"]), "Volume snapping/accessibility/value labels were incorrect.");
+  assert(volume.rangeRects.every((rect) => rect.width >= 44 && rect.height >= 44) && volume.rangeRects[0].right <= volume.rangeRects[1].left && volume.outputRects.every((rect, index) => rect.bottom <= volume.rangeRects[index].top) && volume.popoverRect.left >= 0 && volume.popoverRect.right <= 390 && volume.popoverRect.bottom <= volume.transportRect.top, "Volume ordering, value-above-track, hit areas, or popover placement were invalid.");
   const volumeTail = volume.intents.slice(-2);
   assert(volume.intents.length === beforeVolumeCount + 2, "Volume button implicitly emitted an intent or muted playback.");
   assert(volumeTail[0]?.type === "visual-test-music-volume" && JSON.stringify(volumeTail[0].payload) === JSON.stringify({ volume: 0.5 }), "Music intent was not exact snapped scalar volume.");
   assert(volumeTail[1]?.type === "visual-test-sound-volume" && JSON.stringify(volumeTail[1].payload) === JSON.stringify({ volume: 0.73 }), "Sound intent was not exact fine scalar volume.");
+  assert(volumeTail.every((intent) => intent.detailFrozen && intent.payloadFrozen && intent.bubbles && intent.composed), "Volume intents are mutable or do not bubble across the composed boundary.");
 
-  await page.locator("main").click({ position: { x: 20, y: 20 } });
-  const outsideClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
-  assert(outsideClosed === true, "Outside pointer/click did not close volume controls.");
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  const buttonClosed = await page.evaluate(() => {
+    const root = document.querySelector("aero-visual-test-transport")?.shadowRoot;
+    const button = root?.querySelector("button[data-role='volume-toggle']");
+    const popover = root?.querySelector(".volume-popover");
+    return { hidden: popover?.hasAttribute("hidden"), focusReturned: root?.activeElement === button, intentCount: Reflect.get(window, "__aeroTransportIntents")?.length };
+  });
+  assert(buttonClosed.hidden && buttonClosed.focusReturned && buttonClosed.intentCount === beforeVolumeCount + 2, "Volume button close changed mix, emitted an intent, or failed focus restoration.");
+
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  await page.evaluate(() => document.querySelector("main")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerType: "mouse" })));
+  const pointerClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
+  assert(pointerClosed === true, "Outside composed pointerdown did not close volume controls.");
+
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  await page.evaluate(() => document.querySelector("main")?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })));
+  const clickClosed = await page.evaluate(() => document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden"));
+  assert(clickClosed === true, "Outside composed click did not close volume controls.");
+
   await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
   await page.keyboard.press("Escape");
   const escapeClosed = await page.evaluate(() => {
@@ -150,9 +169,39 @@ try {
   });
   assert(escapeClosed.hidden && escapeClosed.focusReturned, "Escape did not close volume controls and return focus.");
 
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  const hiddenClosed = await page.evaluate(() => {
+    const host = document.querySelector("aero-visual-test-transport");
+    const root = host?.shadowRoot;
+    const button = root?.querySelector("button[data-role='volume-toggle']");
+    const popover = root?.querySelector(".volume-popover");
+    if (!(host instanceof HTMLElement)) return null;
+    host.hidden = true;
+    const hiddenState = { hidden: popover?.hasAttribute("hidden"), expanded: button?.getAttribute("aria-expanded") };
+    host.hidden = false;
+    return { ...hiddenState, staysClosed: popover?.hasAttribute("hidden"), staysCollapsed: button?.getAttribute("aria-expanded") };
+  });
+  assert(hiddenClosed?.hidden && hiddenClosed.expanded === "false" && hiddenClosed.staysClosed && hiddenClosed.staysCollapsed === "false", "External hidden lifecycle did not close and reset the volume popover.");
+
   await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
-    host?.setSnapshot({ active: true, playing: false, currentMs: 10_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.5 });
+    host?.setSnapshot({ active: true, playing: false, currentMs: 10_000, durationMs: 20_000, musicVolume: 0.5, soundVolume: 0.73 });
+  });
+  await page.locator("aero-visual-test-transport button[data-role='volume-toggle']").click();
+  await page.locator("aero-visual-test-transport input[data-role='sound-volume']").focus();
+  await page.keyboard.press("ArrowUp");
+  const volumeKeyboard = await page.evaluate(() => {
+    const host = document.querySelector("aero-visual-test-transport");
+    const range = host?.shadowRoot?.querySelector("input[data-role='sound-volume']");
+    const intents = Reflect.get(window, "__aeroTransportIntents");
+    return { focused: host?.shadowRoot?.activeElement === range, value: range instanceof HTMLInputElement ? range.value : "", text: range?.getAttribute("aria-valuetext"), intent: intents?.at(-1) };
+  });
+  assert(volumeKeyboard.focused && volumeKeyboard.value === "0.74" && volumeKeyboard.text === "0.7", "Native vertical volume keyboard behavior or focus was lost.");
+  assert(volumeKeyboard.intent?.type === "visual-test-sound-volume" && volumeKeyboard.intent.payload.volume === 0.74 && volumeKeyboard.intent.bubbles && volumeKeyboard.intent.composed, "Keyboard volume input did not emit the exact bounded sound intent.");
+  await page.keyboard.press("Escape");
+
+  await page.evaluate(() => {
+    const host = document.querySelector("aero-visual-test-transport");
     const range = host?.shadowRoot?.querySelector("input[data-role='timeline']");
     if (range instanceof HTMLInputElement) range.focus();
   });

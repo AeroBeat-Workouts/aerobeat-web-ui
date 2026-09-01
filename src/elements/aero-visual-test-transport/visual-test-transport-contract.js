@@ -35,7 +35,9 @@ export function snapVisualTestVolume(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const bounded = Math.min(1, Math.max(0, value));
   for (const anchor of visualTestVolumeAnchors) if (Math.abs(bounded - anchor) <= visualTestVolumeSnapThreshold + Number.EPSILON) return anchor;
-  return Number((Math.round(bounded / visualTestVolumeStep) * visualTestVolumeStep).toFixed(2));
+  const stepScale = Math.round(1 / visualTestVolumeStep);
+  const roundedStep = Math.round((bounded + Number.EPSILON) * stepScale) / stepScale;
+  return Number(roundedStep.toFixed(2));
 }
 
 /**

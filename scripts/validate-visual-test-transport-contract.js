@@ -43,7 +43,7 @@ const symbolState = { active: true, playing: false, currentMs: 0, durationMs: 10
 symbolState[Symbol("service")] = new Uint8Array([1]);
 assert.equal(normalizeVisualTestTransportSnapshot(symbolState), defaultVisualTestTransportSnapshot, "Symbol-bearing state crossed the exact boundary.");
 
-for (const [input, expected] of [[-2, 0], [0, 0], [0.04, 0], [0.040_001, 0.04], [0.37, 0.37], [0.459_999, 0.46], [0.46, 0.5], [0.54, 0.5], [0.540_001, 0.54], [0.96, 1], [0.959_999, 0.96], [1, 1], [4, 1]]) assert.equal(snapVisualTestVolume(input), expected, `Unexpected volume snap for ${input}.`);
+for (const [input, expected] of [[-2, 0], [0, 0], [0.04, 0], [0.040_001, 0.04], [0.285, 0.29], [0.37, 0.37], [0.459_999, 0.46], [0.46, 0.5], [0.54, 0.5], [0.540_001, 0.54], [0.58, 0.58], [0.725, 0.73], [0.96, 1], [0.959_999, 0.96], [1, 1], [4, 1]]) assert.equal(snapVisualTestVolume(input), expected, `Unexpected volume snap for ${input}.`);
 for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, "0.5", null, undefined]) assert.equal(snapVisualTestVolume(invalid), null, "Invalid volume did not reject.");
 
 assert.equal(formatVisualTestTimecode(0), "00:00");
