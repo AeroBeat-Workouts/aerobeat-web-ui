@@ -515,7 +515,7 @@ try {
     document.querySelector("#after-scoped-keyboard-test")?.remove();
     return returned;
   });
-  assert(scopedArrow.checked === "flow_grid_v1" && scopedArrow.focused === "flow_grid_v1" && scopedConversionTab === "row_family_balanced_height_v1" && scopedTabExited && scopedTabReturned === "row_family_balanced_height_v1", "Scoped native radio Arrow/Tab keyboard behavior failed.");
+  assert(scopedArrow.checked === "flow_grid_v2" && scopedArrow.focused === "flow_grid_v2" && scopedConversionTab === "row_family_balanced_height_v1" && scopedTabExited && scopedTabReturned === "row_family_balanced_height_v1", "Scoped native radio Arrow/Tab keyboard behavior failed.");
   await page.evaluate(() => {
     const browser = document.createElement("aero-beatsaver-browser");
     browser.id = "music-map-keyboard-test";
@@ -552,12 +552,12 @@ try {
   assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the full development presenter field-for-field.");
   assert(adversarial.gameplayLabels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow", "Boxing Lanes", "Boxing Grid"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact", "Scoped selectors exposed incorrect product labels or groups.");
   assert(adversarial.gameplayChecked === 2 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "boxing_spatial_grid_v1" && adversarial.conversionSelected === "row_family_balanced_height_v1" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact mode and conversion selections.");
-  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_grid_v1::1|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_grid_v2::2|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
   assert(adversarial.scopedModeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(adversarial.scopedModeIntent ?? {}).length === 1 && adversarial.scopedConversionIntent?.recipeId === "cut_family_source_height_v1" && Object.keys(adversarial.scopedConversionIntent ?? {}).length === 1, "Scoped Gameplay intents changed their bounded scalar contract.");
   assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
   assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
   assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
-  assert(adversarial.gameplayFallbackId === "flow_grid_v1" && adversarial.gameplayFallbackChecked === 1 && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
+  assert(adversarial.gameplayFallbackId === "flow_grid_v2" && adversarial.gameplayFallbackChecked === 2 && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
   assert(adversarial.scopedAtomicRejection && adversarial.scopedReconnectIntentCount === 1, `Scoped selector atomicity or reconnect listener exactness regressed: ${JSON.stringify({ atomic: adversarial.scopedAtomicRejection, reconnectIntents: adversarial.scopedReconnectIntentCount })}`);
   assert(adversarial.currentMapChecked === "map-beta" && adversarial.fallbackMapChecked === "map-alpha" && adversarial.mapCheckedCounts.join(",") === "1,1,0", "BeatSaver radios did not preserve current selection, first fallback, and empty truth.");
   assert(adversarial.currentPackageChecked === "package-beta" && adversarial.fallbackPackageChecked === "package-alpha" && adversarial.packageCheckedCounts.join(",") === "1,1,0", "Library radios did not preserve current selection, first fallback, and empty truth.");
@@ -995,7 +995,7 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid"],
+      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid", "Obstacles", "Obstacles", "No Obstacles", "Visual Only"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],

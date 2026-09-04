@@ -1,6 +1,6 @@
 // @ts-check
 
-import { conversionRecipeIds, elementNames, hasExactKeys, isPrototypeTuningIdentity, rulesetIds } from "@aerobeat/web-contracts";
+import { conversionRecipeIds, elementNames, hasExactKeys, isPrototypeTuningIdentity } from "@aerobeat/web-contracts";
 
 /** Public composed UI-intent event name. @type {"aero:ui:intent"} */
 export const aeroUiIntentEventName = "aero:ui:intent";
@@ -555,16 +555,16 @@ export class AeroErrorPanel extends AeroPresenterElement {
 }
 
 const prototypeOptions = Object.freeze([
-  Object.freeze({ id: "flow", label: "Flow · Grid", rulesetId: rulesetIds[0], recipeId: "" }),
-  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[0] }),
-  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: rulesetIds[1], recipeId: conversionRecipeIds[1] }),
-  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: rulesetIds[2], recipeId: conversionRecipeIds[1] })
+  Object.freeze({ id: "flow", label: "Flow · Grid", rulesetId: "flow_grid_v2", recipeId: "" }),
+  Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[0] }),
+  Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[1] }),
+  Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[1] })
 ]);
 const gameplayModeOptions = Object.freeze([
-  Object.freeze({ id: rulesetIds[0], label: "Flow", profileClass: "", profileVersion: "", contentHash: "" }),
-  Object.freeze({ id: rulesetIds[1], label: "Boxing Lanes", profileClass: "", profileVersion: "", contentHash: "" }),
-  Object.freeze({ id: rulesetIds[2], label: "Boxing Grid", profileClass: "", profileVersion: "", contentHash: "" })
+  Object.freeze({ id: "flow_grid_v2", label: "Flow", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: "boxing_semantic_track_v1", label: "Boxing Lanes", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: "boxing_spatial_grid_v1", label: "Boxing Grid", profileClass: "", profileVersion: "", contentHash: "" })
 ]);
 const boxingConversionOptions = Object.freeze([
   Object.freeze({ id: conversionRecipeIds[0], label: "Balanced Height", profileClass: "", profileVersion: "", contentHash: "" }),
@@ -572,11 +572,12 @@ const boxingConversionOptions = Object.freeze([
 ]);
 
 const profileClasses = Object.freeze(["live_visual", "between_run_ruleset", "converter_regeneration"]);
+const flowObstacleOptions = Object.freeze([{id:"default",label:"Obstacles"},{id:"no_obstacles",label:"No Obstacles"},{id:"obstacle_visual_only",label:"Visual Only"}].map((entry)=>Object.freeze({...entry,profileClass:"",profileVersion:"",contentHash:""})));
 const scoringChangeStates = Object.freeze(["idle", "calibrating", "paused_manual", "paused_tracking", "completed", "stopped"]);
 
 /** Flow/four-Boxing prototype and three-class experimental profile presenter. Product embeds may narrow it to Gameplay or Visuals with `[scope]`. */
 export class AeroPrototypeSelector extends AeroPresenterElement {
-  static get observedAttributes() { return ["scope"]; }
+  static get observedAttributes() { return ["scope", "obstacle-mode"]; }
 
   /** Narrow product view, or the unchanged full development view when omitted. @returns {"gameplay" | "visuals" | "full"} */
   get scope() {
@@ -610,7 +611,7 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
     const selected = prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow";
     if (this.scope === "gameplay") {
       const selectedVariant = prototypeOptions.find((option) => option.id === selected) ?? prototypeOptions[0];
-      this.renderMarkup(gameplayProductMarkup(selectedVariant));
+      this.renderMarkup(gameplayProductMarkup(selectedVariant, this.getAttribute("obstacle-mode") ?? "default"));
       return;
     }
     if (this.scope === "visuals") {
@@ -650,6 +651,9 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
     } else if (type === "gameplay-mode-select") {
       const rulesetId = target.dataset.value ?? "";
       if (gameplayModeOptions.some((option) => option.id === rulesetId)) this.emitIntent(type, { rulesetId });
+    } else if (type === "flow-obstacle-mode-select") {
+      const mode = target.dataset.value ?? "";
+      if (flowObstacleOptions.some((option) => option.id === mode)) this.emitIntent(type, { mode });
     } else if (type === "boxing-conversion-select") {
       const recipeId = target.dataset.value ?? "";
       if (boxingConversionOptions.some((option) => option.id === recipeId)) this.emitIntent(type, { recipeId });
@@ -956,13 +960,15 @@ function calibrationMessage(state) { const messages = /** @type {Readonly<Record
 /** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],experimental:boolean,selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
 /** @typedef {Readonly<{id:string,label:string,profileClass:string,profileVersion:string,contentHash:string}>} ProductRadioOption */
 
-/** Scoped Gameplay derives both independent controls from one exact variant snapshot. @param {Readonly<{rulesetId:string,recipeId:string}>} selectedVariant @returns {string} */
-function gameplayProductMarkup(selectedVariant) {
+/** Scoped Gameplay derives independent controls from exact scalar state. @param {Readonly<{rulesetId:string,recipeId:string}>} selectedVariant @param {string} obstacleMode @returns {string} */
+function gameplayProductMarkup(selectedVariant, obstacleMode) {
   const modeIndex = Math.max(0, gameplayModeOptions.findIndex((option) => option.id === selectedVariant.rulesetId));
-  const boxing = selectedVariant.rulesetId !== rulesetIds[0];
+  const boxing = selectedVariant.rulesetId !== "flow_grid_v2";
   const conversionIndex = Math.max(0, boxingConversionOptions.findIndex((option) => option.id === selectedVariant.recipeId));
   const conversion = boxing ? `<fieldset part="conversion-choices"><legend class="product-group-heading">Conversion</legend>${productRadioChoicesMarkup("boxing-conversion-choice", boxingConversionOptions, conversionIndex, "boxing-conversion-select")}</fieldset>` : "";
-  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">Gameplay</h2><fieldset part="choices"><legend class="visually-hidden">Choose Gameplay</legend>${productRadioChoicesMarkup("gameplay-mode-choice", gameplayModeOptions, modeIndex, "gameplay-mode-select")}</fieldset>${conversion}</section>${productRadioStyles}`;
+  const obstacleIndex=Math.max(0,flowObstacleOptions.findIndex((option)=>option.id===obstacleMode));
+  const obstacles=!boxing?`<fieldset part="obstacle-choices"><legend class="product-group-heading">Obstacles</legend>${productRadioChoicesMarkup("flow-obstacle-choice",flowObstacleOptions,obstacleIndex,"flow-obstacle-mode-select")}</fieldset>`:"";
+  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">Gameplay</h2><fieldset part="choices"><legend class="visually-hidden">Choose Gameplay</legend>${productRadioChoicesMarkup("gameplay-mode-choice", gameplayModeOptions, modeIndex, "gameplay-mode-select")}</fieldset>${conversion}${obstacles}</section>${productRadioStyles}`;
 }
 
 /** Native product radio group with no development identity text. @param {string} heading @param {string} name @param {readonly ProductRadioOption[]} options @param {number} selectedIndex @param {string} intent @returns {string} */
