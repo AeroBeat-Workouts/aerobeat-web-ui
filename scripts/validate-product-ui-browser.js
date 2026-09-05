@@ -2,10 +2,10 @@
 
 import { chromium } from "playwright";
 import { mkdirSync, rmSync } from "node:fs";
-import { createServer } from "vite";
+import { createUiValidationServer } from "./create-ui-validation-server.js";
 
 rmSync("node_modules/.vite", { recursive: true, force: true });
-const server = await createServer({ appType: "mpa", configFile: false, logLevel: "error", root: ".", server: { host: "127.0.0.1", port: 0 } });
+const server = await createUiValidationServer();
 await server.listen();
 const url = server.resolvedUrls?.local?.[0];
 if (!url) {
