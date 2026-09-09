@@ -518,7 +518,7 @@ export class AeroSessionActions extends AeroPresenterElement {
     const pendingValue = readString(this.presenterSnapshot, "pendingAction", "");
     const active = activeValue === "start" || activeValue === "test" ? activeValue : "";
     const pending = pendingValue === "start" || pendingValue === "test" ? pendingValue : "";
-    const disabled = !playable || pending !== "";
+    const disabled = !playable;
     const describedBy = playable ? "" : ' aria-describedby="session-actions-prerequisite"';
     this.renderMarkup(`<div class="session-actions" part="actions" role="group" aria-label="Workout actions"><button part="start-button" type="button" data-intent="session-start" aria-current="${active === "start" ? "true" : "false"}" aria-busy="${pending === "start"}"${describedBy} ${disabled ? "disabled" : ""}>Start</button><button part="test-button" type="button" data-intent="session-test" aria-current="${active === "test" ? "true" : "false"}" aria-busy="${pending === "test"}"${describedBy} ${disabled ? "disabled" : ""}>Test</button></div>${playable ? "" : '<p id="session-actions-prerequisite" class="compact-critical live" role="status" aria-live="polite">Download Music first.</p>'}<style>.session-actions{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.session-actions button[aria-current="true"]{background:linear-gradient(180deg,#0a84ff,#086ccf);border-color:#fff;color:#fff}</style>`);
   }

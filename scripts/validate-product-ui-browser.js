@@ -45,7 +45,7 @@ try {
   assert(result.countdownText.includes("Workout time frozen"), "Countdown did not announce frozen workout time.");
   assert(result.hudText.includes("Flow") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Flow/Track/Spatial HUD states were incomplete.");
   assert(result.sessionMissingState.disabled === true && result.sessionMissingState.prerequisite === "Download Music first." && result.disabledSessionIntentCount === 0, "Missing downloaded Music did not truthfully gate Start/Test with a minimal prerequisite.");
-  assert(result.sessionPendingState.disabled === true && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test action truth was not exposed.");
+  assert(result.sessionPendingState.disabled === false && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test truth must remain exposed without disabling intentional restart actions.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
   assert(result.fullscreenDisabledWhenUnsupported === true, "Fullscreen unavailable state did not disable the control.");
   assert(result.fullscreenIntentCount === 2, "Disconnect/reconnect duplicated or lost fullscreen listeners.");
