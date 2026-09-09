@@ -33,7 +33,7 @@ try {
   assert(result.calibrationProgress === "0.75", "Calibration hold progress was not exposed.");
   for (const state of ["waiting", "holding", "cooldown", "calibrated", "error"]) assert(result.calibrationStateTexts[state].length > 0, `Calibration ${state} state was not announced.`);
   assert(result.capabilityLabels === 8, "Capability availability was incomplete.");
-  assert(result.profileCount === 5, "Flow plus four Boxing profile choices were not rendered.");
+  assert(result.profileCount === 6, "Flow Grid, Flow Colliders, and four Boxing profile choices were not rendered.");
   assert(result.checkedProfile.includes("Spatial Grid") && result.checkedProfile.includes("Cut Family"), "Touch/click prototype selection did not expose checked state.");
   assert(result.regenerationText.includes("Regeneration required"), "Converter tuning did not expose regeneration-required telemetry.");
   assert(result.managedProfileClasses === 3, "Visual, scoring, and converter profile classes were not all rendered.");
@@ -43,7 +43,7 @@ try {
   assert(result.renderSurface === true && result.cellCount === 12, "Grid host did not expose its public surface and 4x3 receptors.");
   assert(result.pauseRole === "alertdialog", "Tracking pause was not exposed as an accessible modal alert.");
   assert(result.countdownText.includes("Workout time frozen"), "Countdown did not announce frozen workout time.");
-  assert(result.hudText.includes("Flow") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Flow/Track/Spatial HUD states were incomplete.");
+  assert(result.hudText.includes("Flow Grid") && !/(^|\s)Flow(?=\s|$)/u.test(result.hudText.replaceAll("Flow Grid", "")) && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Flow Grid/Track/Spatial HUD states were incomplete or ambiguous.");
   assert(result.sessionMissingState.disabled === true && result.sessionMissingState.prerequisite === "Download Music first." && result.disabledSessionIntentCount === 0, "Missing downloaded Music did not truthfully gate Start/Test with a minimal prerequisite.");
   assert(result.sessionPendingState.disabled === false && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test truth must remain exposed without disabling intentional restart actions.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
@@ -228,8 +228,13 @@ try {
     const defaultSelectorTwin = document.createElement("aero-prototype-selector");
     defaultSelector.setSnapshot(selector.presenterSnapshot);
     defaultSelectorTwin.setSnapshot(selector.presenterSnapshot);
-    document.body.append(defaultSelector, defaultSelectorTwin);
-    const defaultFullMarkupUnchanged = defaultSelector.shadowRoot?.innerHTML === defaultSelectorTwin.shadowRoot?.innerHTML && defaultSelector.scope === "full" && defaultSelector.shadowRoot?.querySelectorAll("input[type='radio']").length === 0 && defaultSelector.shadowRoot?.querySelectorAll("button[role='radio']").length === 5 && defaultSelector.getProfilePresenterState().profileClasses.length === 3;
+    const noAutoSelector = document.createElement("aero-prototype-selector");
+    const beforeDefaultRenderIntents = captured.length;
+    document.body.append(defaultSelector, defaultSelectorTwin, noAutoSelector);
+    const defaultFlowProfileId = noAutoSelector.getProfilePresenterState().selectedProfileId;
+    const defaultColliderSelected = noAutoSelector.shadowRoot?.querySelector("button[data-value='flow-colliders']")?.getAttribute("aria-checked") === "true";
+    const defaultRenderIntentFree = captured.length === beforeDefaultRenderIntents;
+    const defaultFullMarkupUnchanged = defaultSelector.shadowRoot?.innerHTML === defaultSelectorTwin.shadowRoot?.innerHTML && defaultSelector.scope === "full" && defaultSelector.shadowRoot?.querySelectorAll("input[type='radio']").length === 0 && defaultSelector.shadowRoot?.querySelectorAll("button[role='radio']").length === 6 && defaultSelector.getProfilePresenterState().profileClasses.length === 3;
     const gameplaySelector = document.createElement("aero-prototype-selector");
     gameplaySelector.scope = "gameplay";
     gameplaySelector.setSnapshot({ selectedProfileId: "spatial-row", sessionState: "playing" });
@@ -239,13 +244,14 @@ try {
     document.body.append(gameplaySelector, visualsSelector);
     const gameplayLabels = [...(gameplaySelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
     const gameplayGroupLabels = [...(gameplaySelector.shadowRoot?.querySelectorAll("fieldset") ?? [])].map((group) => [...group.querySelectorAll("label span")].map((label) => label.textContent ?? ""));
+    const staleFlowCopyVisible = [...(defaultSelector.shadowRoot?.querySelectorAll("button[role='radio'] strong") ?? []), ...(gameplaySelector.shadowRoot?.querySelectorAll("label span") ?? [])].some((label) => label.textContent?.trim() === "Flow" || label.textContent?.includes("Flow · Grid"));
     const visualLabels = [...(visualsSelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "");
     const gameplayChecked = gameplaySelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
     const visualChecked = visualsSelector.shadowRoot?.querySelectorAll("input[type='radio']:checked").length ?? 0;
     const gameplaySelected = gameplaySelector.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "";
     const conversionSelected = gameplaySelector.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "";
     const visualSelected = visualsSelector.shadowRoot?.querySelector("input:checked")?.value ?? "";
-    const exactVariantMatrix = ["flow", "semantic-row", "spatial-row", "semantic-cut", "spatial-cut"].map((selectedProfileId) => {
+    const exactVariantMatrix = ["flow", "flow-colliders", "semantic-row", "spatial-row", "semantic-cut", "spatial-cut"].map((selectedProfileId) => {
       const candidate = document.createElement("aero-prototype-selector");
       candidate.scope = "gameplay";
       candidate.setSnapshot({ selectedProfileId, sessionState: "idle" });
@@ -254,6 +260,8 @@ try {
       candidate.remove();
       return result;
     });
+    gameplaySelector.shadowRoot?.querySelector("input[value='flow_colliders_v1']")?.click();
+    const flowColliderIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
     gameplaySelector.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
     gameplaySelector.shadowRoot?.querySelector("input[value='cut_family_source_height_v1']")?.click();
     const scopedModeIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
@@ -400,6 +408,7 @@ try {
     secondFullscreen.remove();
     defaultSelector.remove();
     defaultSelectorTwin.remove();
+    noAutoSelector.remove();
     gameplaySelector.remove();
     visualsSelector.remove();
     gameplayFallback.remove();
@@ -432,8 +441,12 @@ try {
       hugeStorage,
       instanceIntents,
       defaultFullMarkupUnchanged,
+      defaultFlowProfileId,
+      defaultColliderSelected,
+      defaultRenderIntentFree,
       gameplayLabels,
       gameplayGroupLabels,
+      staleFlowCopyVisible,
       visualLabels,
       gameplayChecked,
       visualChecked,
@@ -441,6 +454,7 @@ try {
       conversionSelected,
       visualSelected,
       exactVariantMatrix,
+      flowColliderIntent,
       scopedModeIntent,
       scopedConversionIntent,
       scopedText,
@@ -549,10 +563,12 @@ try {
   assert(adversarial.lifecycleResetCount === 1, "Profile selector disconnect/reconnect duplicated listeners or emitted while detached.");
   assert(adversarial.nanStorage.includes("quota unavailable") && !adversarial.hugeStorage.includes("Infinity") && !adversarial.hugeStorage.includes("-%"), "Storage telemetry exposed invalid numeric output.");
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
-  assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the full development presenter field-for-field.");
-  assert(adversarial.gameplayLabels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow", "Boxing Lanes", "Boxing Grid"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact", "Scoped selectors exposed incorrect product labels or groups.");
+  assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the six-choice development presenter field-for-field.");
+  assert(adversarial.defaultFlowProfileId === "flow" && !adversarial.defaultColliderSelected && adversarial.defaultRenderIntentFree, "Flow Colliders was auto-selected or presenter rendering emitted an intent.");
+  assert(adversarial.gameplayLabels.join("|") === "Flow Grid|Flow Colliders|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow Grid", "Flow Colliders", "Boxing Lanes", "Boxing Grid"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact" && !adversarial.staleFlowCopyVisible, "Scoped selectors exposed incorrect labels/groups or stale ambiguous Flow copy.");
   assert(adversarial.gameplayChecked === 2 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "boxing_spatial_grid_v1" && adversarial.conversionSelected === "row_family_balanced_height_v1" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact mode and conversion selections.");
-  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_grid_v2::2|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_grid_v2::2|flow-colliders:flow_colliders_v1::2|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact six-variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  assert(adversarial.flowColliderIntent?.rulesetId === "flow_colliders_v1" && Object.keys(adversarial.flowColliderIntent ?? {}).length === 1, "Flow Colliders did not emit its exact bounded ruleset intent.");
   assert(adversarial.scopedModeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(adversarial.scopedModeIntent ?? {}).length === 1 && adversarial.scopedConversionIntent?.recipeId === "cut_family_source_height_v1" && Object.keys(adversarial.scopedConversionIntent ?? {}).length === 1, "Scoped Gameplay intents changed their bounded scalar contract.");
   assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
   assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
@@ -725,7 +741,7 @@ try {
         controlsVisible: controls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.appearance !== "none" && style.visibility === "visible"; })
       };
     });
-    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Conversion" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(scopedEvidence.conversionIntent ?? {}).length === 1 && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow Grid|Flow Colliders|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Conversion" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(scopedEvidence.conversionIntent ?? {}).length === 1 && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
     await scopedPage.evaluate((sourceUrl) => {
       const iframe = document.createElement("iframe");
@@ -768,7 +784,7 @@ try {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
       };
     });
-    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && iframeEvidence.conversionLegendText === "Conversion" && iframeEvidence.conversionLegendVisible && iframeEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(iframeEvidence.modeIntent ?? {}).length === 1 && iframeEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(iframeEvidence.conversionIntent ?? {}).length === 1 && !iframeEvidence.overflow, `${viewport.name} compact iframe scoped Gameplay label/payload evidence failed: ${JSON.stringify(iframeEvidence)}.`);
+    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow Grid|Flow Colliders|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && iframeEvidence.conversionLegendText === "Conversion" && iframeEvidence.conversionLegendVisible && iframeEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(iframeEvidence.modeIntent ?? {}).length === 1 && iframeEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(iframeEvidence.conversionIntent ?? {}).length === 1 && !iframeEvidence.overflow, `${viewport.name} compact iframe scoped Gameplay label/payload evidence failed: ${JSON.stringify(iframeEvidence)}.`);
     await scopedPage.close();
   }
   for (const viewport of [
@@ -995,7 +1011,7 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid", "Obstacles", "Obstacles", "No Obstacles", "Visual Only"],
+      gameplay: ["Flow Grid", "Flow Colliders", "Boxing Lanes", "Boxing Grid", "Obstacles", "Obstacles", "No Obstacles", "Visual Only"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],
