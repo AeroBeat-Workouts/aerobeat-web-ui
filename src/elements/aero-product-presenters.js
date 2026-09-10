@@ -425,13 +425,13 @@ export class AeroGridPlayfield extends AeroPresenterElement {
   }
 }
 
-/** Flow Grid HUD presenter. */
+/** Flow HUD presenter. The sole visible Flow label is exactly "Flow". */
 export class AeroFlowHud extends AeroPresenterElement {
   render() {
     const score = readNumber(this.presenterSnapshot, "score", 0);
     const combo = readNumber(this.presenterSnapshot, "combo", 0);
     const direction = readString(this.presenterSnapshot, "direction", "—");
-    this.renderMarkup(`<section class="panel row" part="hud" aria-label="Flow Grid status"><strong>Flow Grid</strong><span part="score">Score ${score}</span><span part="combo">Combo ${combo}</span><span part="direction">Direction ${escapeHtml(direction)}</span></section>`);
+    this.renderMarkup(`<section class="panel row" part="hud" aria-label="Flow status"><strong>Flow</strong><span part="score">Score ${score}</span><span part="combo">Combo ${combo}</span><span part="direction">Direction ${escapeHtml(direction)}</span></section>`);
   }
 }
 
@@ -555,16 +555,14 @@ export class AeroErrorPanel extends AeroPresenterElement {
 }
 
 const prototypeOptions = Object.freeze([
-  Object.freeze({ id: "flow", label: "Flow Grid", rulesetId: "flow_grid_v2", recipeId: "" }),
-  Object.freeze({ id: "flow-colliders", label: "Flow Colliders", rulesetId: "flow_colliders_v1", recipeId: "" }),
+  Object.freeze({ id: "flow", label: "Flow", rulesetId: "flow_colliders_v1", recipeId: "" }),
   Object.freeze({ id: "semantic-row", label: "Semantic Track · Row Family", rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[0] }),
   Object.freeze({ id: "spatial-row", label: "Spatial Grid · Row Family", rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[0] }),
   Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[1] }),
   Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[1] })
 ]);
 const gameplayModeOptions = Object.freeze([
-  Object.freeze({ id: "flow_grid_v2", label: "Flow Grid", profileClass: "", profileVersion: "", contentHash: "" }),
-  Object.freeze({ id: "flow_colliders_v1", label: "Flow Colliders", profileClass: "", profileVersion: "", contentHash: "" }),
+  Object.freeze({ id: "flow_colliders_v1", label: "Flow", profileClass: "", profileVersion: "", contentHash: "" }),
   Object.freeze({ id: "boxing_semantic_track_v1", label: "Boxing Lanes", profileClass: "", profileVersion: "", contentHash: "" }),
   Object.freeze({ id: "boxing_spatial_grid_v1", label: "Boxing Grid", profileClass: "", profileVersion: "", contentHash: "" })
 ]);
@@ -577,7 +575,7 @@ const profileClasses = Object.freeze(["live_visual", "between_run_ruleset", "con
 const flowObstacleOptions = Object.freeze([{id:"default",label:"Obstacles"},{id:"no_obstacles",label:"No Obstacles"},{id:"obstacle_visual_only",label:"Visual Only"}].map((entry)=>Object.freeze({...entry,profileClass:"",profileVersion:"",contentHash:""})));
 const scoringChangeStates = Object.freeze(["idle", "calibrating", "paused_manual", "paused_tracking", "completed", "stopped"]);
 
-/** Flow Grid/Flow Colliders/four-Boxing prototype and three-class experimental profile presenter. Product embeds may narrow it to Gameplay or Visuals with `[scope]`. */
+/** Flow/four-Boxing prototype and three-class experimental profile presenter. Product embeds may narrow it to Gameplay or Visuals with `[scope]`. */
 export class AeroPrototypeSelector extends AeroPresenterElement {
   static get observedAttributes() { return ["scope", "obstacle-mode"]; }
 

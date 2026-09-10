@@ -53,12 +53,14 @@ assert.ok(presenters.includes('[part="storage"]') && presenters.includes('[part=
 assert.ok(presenters.includes('readRecordList(snapshot, "songs")') && presenters.includes('readBoundedString(record, "collectionId"') && presenters.includes('data-intent="library-difficulty-select"') && presenters.includes('part="selected-actions"'), "Compact library does not consume bounded collection summaries with one selected action area.");
 assert.ok(presenters.includes("compactLibraryMarkup") && presenters.includes("normalizeDownloadedSong") && presenters.includes("No downloaded songs."), "Compact downloaded-song states are incomplete.");
 assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "Calibration composition does not preserve media/render surfaces across snapshots.");
-for (const profileId of ['id: "flow"', 'id: "flow-colliders"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
+for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
   assert.ok(presenters.includes(profileId), `Missing internal prototype profile ${profileId}`);
 }
-for (const label of ["Flow Grid", "Flow Colliders", "Boxing Lanes", "Boxing Grid", "Balanced Height", "Source Height"]) assert.ok(presenters.includes(`label: "${label}"`), `Missing product choice ${label}.`);
-assert.ok(presenters.includes('id: "flow", label: "Flow Grid", rulesetId: "flow_grid_v2"') && presenters.includes('id: "flow-colliders", label: "Flow Colliders", rulesetId: "flow_colliders_v1"'), "Flow profile identities or stable ruleset IDs changed.");
-assert.equal(presenters.includes('label: "Flow"'), false, "Ambiguous visible Flow choice remains.");
+for (const label of ["Flow", "Boxing Lanes", "Boxing Grid", "Balanced Height", "Source Height"]) assert.ok(presenters.includes(`label: "${label}"`), `Missing product choice ${label}.`);
+assert.ok(presenters.includes('id: "flow", label: "Flow", rulesetId: "flow_colliders_v1"'), "The sole Flow profile identity must be the exact flow_colliders_v1 ruleset.");
+assert.equal(presenters.includes("flow_grid_v2"), false, "The retired Flow Grid ruleset ID must not appear in product presenters.");
+assert.equal(presenters.includes("Flow Colliders"), false, "Stale Flow Colliders copy remains.");
+assert.equal(presenters.includes("Flow Grid"), false, "Stale Flow Grid copy remains.");
 assert.equal(presenters.includes("Flow · Grid"), false, "Stale Flow · Grid copy remains.");
 for (const intent of ["gameplay-mode-select", "boxing-conversion-select"]) assert.ok(presenters.includes(`\"${intent}\"`), `Missing scoped scalar intent ${intent}.`);
 assert.ok(presenters.includes("{ rulesetId }") && presenters.includes("{ recipeId }"), "Scoped Gameplay intents do not expose bounded scalar IDs.");
