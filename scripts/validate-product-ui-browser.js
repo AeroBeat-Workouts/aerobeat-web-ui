@@ -1011,7 +1011,7 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid", "Obstacles", "Obstacles", "No Obstacles", "Visual Only"],
+      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid", "Obstacles", "Enabled", "Disabled"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],

@@ -572,7 +572,7 @@ const boxingConversionOptions = Object.freeze([
 ]);
 
 const profileClasses = Object.freeze(["live_visual", "between_run_ruleset", "converter_regeneration"]);
-const flowObstacleOptions = Object.freeze([{id:"default",label:"Obstacles"},{id:"no_obstacles",label:"No Obstacles"},{id:"obstacle_visual_only",label:"Visual Only"}].map((entry)=>Object.freeze({...entry,profileClass:"",profileVersion:"",contentHash:""})));
+const flowObstacleOptions = Object.freeze([{id:"default",label:"Enabled"},{id:"no_obstacles",label:"Disabled"}].map((entry)=>Object.freeze({...entry,profileClass:"",profileVersion:"",contentHash:""})));
 const scoringChangeStates = Object.freeze(["idle", "calibrating", "paused_manual", "paused_tracking", "completed", "stopped"]);
 
 /** Flow/four-Boxing prototype and three-class experimental profile presenter. Product embeds may narrow it to Gameplay or Visuals with `[scope]`. */
