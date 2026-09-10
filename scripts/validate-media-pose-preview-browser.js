@@ -16,6 +16,7 @@ if (!url) {
   await server.close();
   throw new Error("Vite did not expose a local validation URL.");
 }
+const expectedPageUrl = `${url}.testbed/demo/media-pose-preview-validation.html`;
 
 /** @type {string[]} */
 const consoleNoise = [];
@@ -28,16 +29,17 @@ try {
   page.on("console", (message) => {
     const type = message.type();
     const text = message.text();
-    const url = message.location().url;
-    if ((type === "warning" || type === "error") && !isAllowedPlaywrightConsoleMessage(type, text, url)) {
-      consoleNoise.push(`${type}: ${text} [sourceUrl=${JSON.stringify(url)}]`);
+    const location = message.location();
+    const sourceUrl = location.url;
+    if ((type === "warning" || type === "error") && !isAllowedPlaywrightConsoleMessage(type, text, sourceUrl, location.lineNumber, location.columnNumber, expectedPageUrl)) {
+      consoleNoise.push(`${type}: ${text} [sourceUrl=${JSON.stringify(sourceUrl)}]`);
     }
   });
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
 
-  await page.goto(`${url}.testbed/demo/media-pose-preview-validation.html`, { waitUntil: "networkidle" });
+  await page.goto(expectedPageUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => Boolean(window.__aeroPreviewValidation));
   const validation = await page.evaluate(() => window.__aeroPreviewValidation);
 
