@@ -3,6 +3,7 @@
 import { chromium } from "playwright";
 import { rmSync } from "node:fs";
 import { createUiValidationServer } from "./create-ui-validation-server.js";
+import { isAllowedPlaywrightConsoleMessage } from "./is-allowed-playwright-console-message.js";
 
 rmSync("node_modules/.vite", { recursive: true, force: true });
 
@@ -25,8 +26,11 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ deviceScaleFactor: 2 });
   page.on("console", (message) => {
-    if ((message.type() === "warning" || message.type() === "error") && !message.text().includes("GPU stall due to ReadPixels")) {
-      consoleNoise.push(`${message.type()}: ${message.text()}`);
+    const type = message.type();
+    const text = message.text();
+    const url = message.location().url;
+    if ((type === "warning" || type === "error") && !isAllowedPlaywrightConsoleMessage(type, text, url)) {
+      consoleNoise.push(`${type}: ${text} [sourceUrl=${JSON.stringify(url)}]`);
     }
   });
   page.on("pageerror", (error) => {

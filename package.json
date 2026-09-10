@@ -25,7 +25,7 @@
     "check:jsdoc": "node scripts/validate-jsdoc-no-any.js",
     "check:imports": "node scripts/validate-public-imports.js",
     "check:components": "node scripts/validate-component-rules.js",
-    "check:console": "node scripts/validate-playwright-console-noise.js",
+    "check:console": "node scripts/validate-playwright-console-noise.js && node scripts/validate-playwright-console-message-classifier.js",
     "check:product-contract": "node scripts/validate-product-ui-contract.js",
     "check:transport-contract": "node scripts/validate-visual-test-transport-contract.js",
     "check:preview": "node scripts/validate-media-pose-preview-browser.js",
