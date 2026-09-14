@@ -629,7 +629,10 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
   /** Deterministic, immutable host-readable profile state; never a bundle. @returns {Readonly<{selectedProfileId:string,sessionState:string,profileClasses:readonly ProfileClassState[]}>} */
   getProfilePresenterState() {
     const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
-    return Object.freeze({ selectedProfileId: prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow", sessionState: readString(this.presenterSnapshot, "sessionState", "idle"), profileClasses: normalizeProfileClassStates(this.presenterSnapshot) });
+    // z2tx: accept all gameplayProfileToVariant keys (including `boxing`) as valid
+    // selectedProfileId values, not just the legacy prototypeOptions IDs.
+    const validProfileId = Object.hasOwn(gameplayProfileToVariant, selectedSnapshot) ? selectedSnapshot : "flow";
+    return Object.freeze({ selectedProfileId: validProfileId, sessionState: readString(this.presenterSnapshot, "sessionState", "idle"), profileClasses: normalizeProfileClassStates(this.presenterSnapshot) });
   }
 
   render() {
@@ -1079,7 +1082,7 @@ function visualProfileLabel(profileId) {
 /** Validate one complete selector snapshot without invoking accessors. @param {unknown} value @returns {boolean} */
 function isValidProfilePresenterSnapshot(value) {
   if (!hasExactKeys(value, ["selectedProfileId", "sessionState", "profileClasses"])) return false;
-  if (typeof value.selectedProfileId !== "string" || !prototypeOptions.some((option) => option.id === value.selectedProfileId) || typeof value.sessionState !== "string" || value.sessionState.length > 64 || !isExactDataArray(value.profileClasses, 3)) return false;
+  if (typeof value.selectedProfileId !== "string" || !Object.hasOwn(gameplayProfileToVariant, value.selectedProfileId) || typeof value.sessionState !== "string" || value.sessionState.length > 64 || !isExactDataArray(value.profileClasses, 3)) return false;
   const seen = new Set();
   for (const state of value.profileClasses) {
     const classDescriptor = typeof state === "object" && state !== null ? Object.getOwnPropertyDescriptor(state, "class") : undefined;
