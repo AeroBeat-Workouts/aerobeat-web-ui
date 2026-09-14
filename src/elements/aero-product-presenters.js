@@ -577,6 +577,21 @@ const gameplayModeOptions = Object.freeze([
 ]);
 /** Hidden-but-still-resolvable boxing rulesets for stored-package playback. */
 const hiddenGameplayRulesetIds = Object.freeze(["boxing_semantic_track_v1", "boxing_spatial_grid_v1"]);
+/**
+ * z2tx: map the exact `selectedGameplayProfileId` values (produced by the
+ * assembly's `selectedGameplayProfileId` / `profilePresentationId`) back to the
+ * `{rulesetId, recipeId}` pair that `gameplayProductMarkup` needs to check the
+ * correct visible radio. The legacy hidden-variant profile IDs map to their
+ * stored ruleset + recipe so a data-intact package still renders its notice.
+ */
+const gameplayProfileToVariant = Object.freeze({
+  flow: Object.freeze({ rulesetId: "flow_colliders_v1", recipeId: "" }),
+  boxing: Object.freeze({ rulesetId: "boxing_collider_v1", recipeId: "" }),
+  "semantic-row": Object.freeze({ rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[0] }),
+  "spatial-row": Object.freeze({ rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[0] }),
+  "semantic-cut": Object.freeze({ rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[1] }),
+  "spatial-cut": Object.freeze({ rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[1] }),
+});
 const boxingConversionOptions = Object.freeze([
   Object.freeze({ id: conversionRecipeIds[0], label: "Balanced Height", profileClass: "", profileVersion: "", contentHash: "" }),
   Object.freeze({ id: conversionRecipeIds[1], label: "Source Height", profileClass: "", profileVersion: "", contentHash: "" })
@@ -621,7 +636,12 @@ export class AeroPrototypeSelector extends AeroPresenterElement {
     const selectedSnapshot = readString(this.presenterSnapshot, "selectedProfileId", "flow");
     const selected = prototypeOptions.some((option) => option.id === selectedSnapshot) ? selectedSnapshot : "flow";
     if (this.scope === "gameplay") {
-      const selectedVariant = prototypeOptions.find((option) => option.id === selected) ?? prototypeOptions[0];
+      // z2tx: resolve the raw profile ID to the exact rulesetId/recipeId pair so the
+      // correct visible radio is checked. The `boxing` profile ID (boxing_collider_v1)
+      // has no entry in `prototypeOptions`, so the old lookup fell through to Flow.
+      // Use `selectedSnapshot` (the raw value from the presenter snapshot) rather than
+      // `selected` (which is clamped to `prototypeOptions` IDs) to preserve `boxing`.
+      const selectedVariant = gameplayProfileToVariant[selectedSnapshot] ?? gameplayProfileToVariant.flow;
       this.renderMarkup(gameplayProductMarkup(selectedVariant, this.getAttribute("obstacle-mode") ?? "default"));
       return;
     }
