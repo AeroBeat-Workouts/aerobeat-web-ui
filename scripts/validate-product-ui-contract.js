@@ -56,7 +56,13 @@ assert.ok(screen.includes("#ensureDom") && screen.includes("#applySnapshot"), "C
 for (const profileId of ['id: "flow"', 'id: "semantic-row"', 'id: "spatial-row"', 'id: "semantic-cut"', 'id: "spatial-cut"']) {
   assert.ok(presenters.includes(profileId), `Missing internal prototype profile ${profileId}`);
 }
-for (const label of ["Flow", "Boxing Lanes", "Boxing Grid", "Balanced Height", "Source Height"]) assert.ok(presenters.includes(`label: "${label}"`), `Missing product choice ${label}.`);
+// v1 visible surface: exactly Flow + Boxing in the mode selector; conversion
+// labels remain for stored hidden-variant (Lanes/Grid) playback.
+for (const label of ["Flow", "Boxing", "Balanced Height", "Source Height"]) assert.ok(presenters.includes(`label: "${label}"`), `Missing product choice ${label}.`);
+assert.equal(presenters.includes('label: "Boxing Lanes"'), false, "Hidden legacy Lanes label must not appear in the visible selector.");
+assert.equal(presenters.includes('label: "Boxing Grid"'), false, "Hidden legacy Grid label must not appear in the visible selector.");
+assert.ok(presenters.includes('id: "boxing_collider_v1", label: "Boxing"'), "The Boxing visible option must be the exact boxing_collider_v1 ruleset.");
+assert.ok(presenters.includes("hiddenGameplayRulesetIds"), "Stored hidden-variant resolution support is missing from the presenters.");
 assert.ok(presenters.includes('id: "flow", label: "Flow", rulesetId: "flow_colliders_v1"'), "The sole Flow profile identity must be the exact flow_colliders_v1 ruleset.");
 assert.equal(presenters.includes("flow_grid_v2"), false, "The retired Flow Grid ruleset ID must not appear in product presenters.");
 assert.equal(presenters.includes("Flow Colliders"), false, "Stale Flow Colliders copy remains.");

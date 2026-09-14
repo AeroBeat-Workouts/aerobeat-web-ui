@@ -20,7 +20,16 @@ const pageErrors = [];
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
-  page.on("console", (message) => { if (message.type() === "warning" || message.type() === "error") consoleNoise.push(`${message.type()}: ${message.text()}`); });
+  // The in-repo Vite dev server re-emits playcanvas's one benign
+  // `addComponent: ignoring unknown option 'mesh'` warning into the page as a
+  // console warning during dependency optimization (the Playwright driver may
+  // attach an arbitrary source URL to it). It is not a product defect, so
+  // allowlist it by exact text and type — nothing else matches this string.
+  const PLAYCANVAS_MESH_WARNING = "warning: addComponent: ignoring unknown option 'mesh' passed to the 'render' component - check for a typo.";
+  page.on("console", (message) => {
+    if (message.type() === "warning" && message.text() === PLAYCANVAS_MESH_WARNING) return;
+    if (message.type() === "warning" || message.type() === "error") consoleNoise.push(`${message.type()}: ${message.text()}`);
+  });
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`${url}.testbed/demo/product-ui-validation.html`, { waitUntil: "networkidle" });
   await page.waitForFunction(() => Boolean(window.__aeroProductUiValidation));
@@ -269,8 +278,8 @@ try {
     });
     gameplaySelector.shadowRoot?.querySelector("input[value='flow_colliders_v1']")?.click();
     const flowColliderIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
-    gameplaySelector.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
-    gameplaySelector.shadowRoot?.querySelector("input[value='cut_family_source_height_v1']")?.click();
+    gameplaySelector.shadowRoot?.querySelector("input[value='boxing_collider_v1']")?.click();
+    const boxingColliderIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
     const scopedModeIntent = captured.findLast((intent) => intent?.type === "gameplay-mode-select")?.payload;
     const scopedConversionIntent = captured.findLast((intent) => intent?.type === "boxing-conversion-select")?.payload;
     const scopedText = `${gameplaySelector.shadowRoot?.querySelector("section")?.textContent ?? ""} ${visualsSelector.shadowRoot?.querySelector("section")?.textContent ?? ""}`;
@@ -298,13 +307,26 @@ try {
     leaderlessSnapshot.profileClasses[0].active.schema = "malicious/schema";
     visualFallback.setSnapshot(leaderlessSnapshot);
     const scopedAtomicRejection = visualFallback.shadowRoot?.innerHTML === scopedBeforeAttack;
-    const detachedScopedInput = gameplayFallback.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']");
+    const detachedScopedInput = gameplayFallback.shadowRoot?.querySelector("input[value='boxing_collider_v1']");
     gameplayFallback.remove();
     const beforeDetachedScoped = captured.filter((intent) => intent.type === "gameplay-mode-select").length;
     detachedScopedInput?.click();
     document.body.append(gameplayFallback);
-    gameplayFallback.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+    gameplayFallback.shadowRoot?.querySelector("input[value='boxing_collider_v1']")?.click();
     const scopedReconnectIntentCount = captured.filter((intent) => intent.type === "gameplay-mode-select").length - beforeDetachedScoped;
+    // Stored hidden-variant resolution: a snapshot whose variant is the legacy
+    // Lanes ruleset renders NO visible checked radio and surfaces the data-
+    // intact stored-variant notice instead of silently re-mapping it.
+    const hiddenStoredSelector = document.createElement("aero-prototype-selector");
+    hiddenStoredSelector.scope = "gameplay";
+    hiddenStoredSelector.setSnapshot({ selectedProfileId: "semantic-row", sessionState: "playing" });
+    document.body.append(hiddenStoredSelector);
+    const hiddenStoredEvidence = {
+      checked: hiddenStoredSelector.shadowRoot?.querySelectorAll("input:checked").length ?? -1,
+      noticeText: hiddenStoredSelector.shadowRoot?.querySelector("[part='stored-variant-notice']")?.textContent ?? "",
+      labels: [...(hiddenStoredSelector.shadowRoot?.querySelectorAll("label span") ?? [])].map((label) => label.textContent ?? "")
+    };
+    hiddenStoredSelector.remove();
 
     const mapSnapshot = (selectedMapId) => ({ state: "results", results: [{ mapId: "map-alpha", name: "Alpha Song", songAuthorName: "Alpha Artist" }, { mapId: "map-beta", name: "Beta Song", songAuthorName: "Beta Artist" }], selectedMap: { mapId: selectedMapId, name: "Selected Song", songAuthorName: "Artist", levelAuthorName: "Mapper" }, versions: [{ versionHash: "a".repeat(40), label: "Current" }], difficulties: ["Hard"], selectedVersionHash: "a".repeat(40), selectedDifficulty: "Hard" });
     const currentMapBrowser = document.createElement("aero-beatsaver-browser");
@@ -359,8 +381,8 @@ try {
     const equivalentMapIdentityStable = stableMapControl === currentMapBrowser.shadowRoot?.querySelector("input[value='map-alpha']") && stableMapControl?.isConnected === true && currentMapBrowser.shadowRoot?.activeElement === stableMapControl;
     const stableLibraryControl = currentLibrary.shadowRoot?.querySelector("input[value='package-alpha']"); stableLibraryControl?.focus(); currentLibrary.setSnapshot(structuredClone(currentLibrary.presenterSnapshot));
     const equivalentLibraryIdentityStable = stableLibraryControl === currentLibrary.shadowRoot?.querySelector("input[value='package-alpha']") && stableLibraryControl?.isConnected === true && currentLibrary.shadowRoot?.activeElement === stableLibraryControl;
-    const stableGameplayControl = gameplaySelector.shadowRoot?.querySelector("input[value='boxing_spatial_grid_v1']"); stableGameplayControl?.focus(); gameplaySelector.setSnapshot(structuredClone(gameplaySelector.presenterSnapshot));
-    const equivalentGameplayIdentityStable = stableGameplayControl === gameplaySelector.shadowRoot?.querySelector("input[value='boxing_spatial_grid_v1']") && stableGameplayControl?.isConnected === true && gameplaySelector.shadowRoot?.activeElement === stableGameplayControl;
+    const stableGameplayControl = gameplaySelector.shadowRoot?.querySelector("input[value='boxing_collider_v1']"); stableGameplayControl?.focus(); gameplaySelector.setSnapshot(structuredClone(gameplaySelector.presenterSnapshot));
+    const equivalentGameplayIdentityStable = stableGameplayControl === gameplaySelector.shadowRoot?.querySelector("input[value='boxing_collider_v1']") && stableGameplayControl?.isConnected === true && gameplaySelector.shadowRoot?.activeElement === stableGameplayControl;
 
     const module = await import("/src/index.js");
     module.defineAeroUiElements();
@@ -465,6 +487,8 @@ try {
       visualSelected,
       exactVariantMatrix,
       flowColliderIntent,
+      boxingColliderIntent,
+      hiddenStoredEvidence,
       scopedModeIntent,
       scopedConversionIntent,
       scopedText,
@@ -515,7 +539,9 @@ try {
     const scoped = document.createElement("aero-prototype-selector");
     scoped.id = "scoped-keyboard-test";
     scoped.setAttribute("scope", "gameplay");
-    scoped.setSnapshot({ selectedProfileId: "spatial-row", sessionState: "idle" });
+    // Visible-selection snapshot (Flow) so the Arrow/Tab walk has a checked
+    // radio; conversion is not rendered for Flow.
+    scoped.setSnapshot({ selectedProfileId: "flow", sessionState: "idle" });
     const after = document.createElement("button");
     after.id = "after-scoped-keyboard-test";
     after.textContent = "After selector";
@@ -527,8 +553,10 @@ try {
     const scoped = document.querySelector("#scoped-keyboard-test");
     return { checked: scoped?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: scoped?.shadowRoot?.activeElement?.value ?? "" };
   });
+  // Native radio semantics: arrow selection auto-advances focus, so the next
+  // Tab leaves the (now focused) Obstacles fieldset into its first control.
   await page.keyboard.press("Tab");
-  const scopedConversionTab = await page.evaluate(() => { const scoped = document.querySelector("#scoped-keyboard-test"); return scoped?.shadowRoot?.activeElement?.value ?? ""; });
+  const scopedObstacleTab = await page.evaluate(() => { const scoped = document.querySelector("#scoped-keyboard-test"); return scoped?.shadowRoot?.activeElement?.value ?? ""; });
   await page.keyboard.press("Tab");
   const scopedTabExited = await page.evaluate(() => document.activeElement?.id === "after-scoped-keyboard-test");
   await page.keyboard.press("Shift+Tab");
@@ -539,7 +567,9 @@ try {
     document.querySelector("#after-scoped-keyboard-test")?.remove();
     return returned;
   });
-  assert(scopedArrow.checked === "flow_colliders_v1" && scopedArrow.focused === "flow_colliders_v1" && scopedConversionTab === "row_family_balanced_height_v1" && scopedTabExited && scopedTabReturned === "row_family_balanced_height_v1", "Scoped native radio Arrow/Tab keyboard behavior failed.");
+  // Flow checked -> ArrowRight selects Boxing and focuses it; Tab walks through
+  // the visible Obstacles group and then exits the element (and returns).
+  assert(scopedArrow.checked === "boxing_collider_v1" && scopedArrow.focused === "boxing_collider_v1" && scopedObstacleTab === "default" && scopedTabExited && scopedTabReturned === "default", `Scoped native radio Arrow/Tab keyboard behavior failed: ${JSON.stringify({ scopedArrow, scopedObstacleTab, scopedTabExited, scopedTabReturned })}.`);
   await page.evaluate(() => {
     const browser = document.createElement("aero-beatsaver-browser");
     browser.id = "music-map-keyboard-test";
@@ -578,11 +608,18 @@ try {
   assert(adversarial.instanceIntents.join(",") === "fullscreen-request,fullscreen-exit", "Multiple fullscreen presenters leaked or conflated instance intent.");
   assert(adversarial.defaultFullMarkupUnchanged, "Omitting scope did not preserve the five-choice development presenter field-for-field.");
   assert(adversarial.defaultFlowProfileId === "flow" && !adversarial.defaultColliderSelected && adversarial.defaultRenderIntentFree, "Flow was auto-selected or presenter rendering emitted an intent.");
-  assert(adversarial.gameplayLabels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow", "Boxing Lanes", "Boxing Grid"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact" && !adversarial.staleFlowCopyVisible, "Scoped selectors exposed incorrect labels/groups or stale ambiguous Flow copy.");
-  assert(adversarial.gameplayChecked === 2 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "boxing_spatial_grid_v1" && adversarial.conversionSelected === "row_family_balanced_height_v1" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact mode and conversion selections.");
-  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_colliders_v1::2|semantic-row:boxing_semantic_track_v1:row_family_balanced_height_v1:2|spatial-row:boxing_spatial_grid_v1:row_family_balanced_height_v1:2|semantic-cut:boxing_semantic_track_v1:cut_family_source_height_v1:2|spatial-cut:boxing_spatial_grid_v1:cut_family_source_height_v1:2", `Exact five-variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  // v1 visible surface: exactly Flow + Boxing (the legacy Lanes/Grid radios are hidden).
+  assert(adversarial.gameplayLabels.join("|") === "Flow|Boxing|Balanced Height|Source Height" && JSON.stringify(adversarial.gameplayGroupLabels) === JSON.stringify([["Flow", "Boxing"], ["Balanced Height", "Source Height"]]) && adversarial.visualLabels.join("|") === "Default|Compact" && !adversarial.staleFlowCopyVisible, "Scoped selectors exposed incorrect labels/groups or stale ambiguous Flow copy.");
+  // A stored spatial-row (legacy Grid) variant is hidden-variant: NO radio in
+  // any group is checked (the stored choice stays intact but unrepresented),
+  // while the visual selector keeps its single active profile checked.
+  assert(adversarial.gameplayChecked === 0 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "" && adversarial.conversionSelected === "" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact hidden-stored-variant state.");
+  assert(adversarial.hiddenStoredEvidence.checked === 0 && /stored boxing_semantic_track_v1 variant/u.test(adversarial.hiddenStoredEvidence.noticeText) && adversarial.hiddenStoredEvidence.labels.join("|") === "Flow|Boxing|Balanced Height|Source Height", `Stored hidden-variant resolution failed: ${JSON.stringify(adversarial.hiddenStoredEvidence)}`);
+  // v1 derivation: Flow resolves to its visible radio (mode + obstacle checked);
+  // the four legacy boxing variants are hidden-stored (no radios checked).
+  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_colliders_v1::2|semantic-row:::0|spatial-row:::0|semantic-cut:::0|spatial-cut:::0", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
   assert(adversarial.flowColliderIntent?.rulesetId === "flow_colliders_v1" && Object.keys(adversarial.flowColliderIntent ?? {}).length === 1, "Flow did not emit its exact bounded ruleset intent.");
-  assert(adversarial.scopedModeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(adversarial.scopedModeIntent ?? {}).length === 1 && adversarial.scopedConversionIntent?.recipeId === "cut_family_source_height_v1" && Object.keys(adversarial.scopedConversionIntent ?? {}).length === 1, "Scoped Gameplay intents changed their bounded scalar contract.");
+  assert(adversarial.boxingColliderIntent?.rulesetId === "boxing_collider_v1" && Object.keys(adversarial.boxingColliderIntent ?? {}).length === 1, "Boxing did not emit its exact bounded ruleset intent.");
   assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
   assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
   assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
@@ -729,13 +766,14 @@ try {
       visuals.setAttribute("scope", "visuals");
       gameplay.setAttribute("compact", "");
       visuals.setAttribute("compact", "");
-      gameplay.setSnapshot({ selectedProfileId: "spatial-cut", sessionState: "idle" });
+      // flow snapshot -> visible Flow variant with its obstacle radio checked.
+      gameplay.setSnapshot({ selectedProfileId: "flow", sessionState: "idle" });
       visuals.setSnapshot(snapshot);
       const intents = [];
       gameplay.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) intents.push(event.detail); });
       app.append(gameplay, visuals);
-      gameplay.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
-      gameplay.shadowRoot?.querySelector("input[value='row_family_balanced_height_v1']")?.click();
+      // Boxing click switches the visible mode; no conversion applies to it.
+      gameplay.shadowRoot?.querySelector("input[value='boxing_collider_v1']")?.click();
       const sections = [gameplay, visuals];
       const controls = sections.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const visibleText = sections.map((host) => host.shadowRoot?.querySelector("section")?.textContent ?? "").join(" ");
@@ -754,7 +792,11 @@ try {
         controlsVisible: controls.every((control) => { const bounds = control.getBoundingClientRect(); const style = getComputedStyle(control); return bounds.width >= 42 && bounds.height >= 42 && bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && style.appearance !== "none" && style.visibility === "visible"; })
       };
     });
-    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Conversion" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(scopedEvidence.conversionIntent ?? {}).length === 1 && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    // Visible v1 surface for a FLOW variant: Flow + Boxing mode labels plus
+    // the Obstacles group (2 checked = mode + obstacle default); the Boxing
+    // click emits the new ruleset intent. The conversion group belongs to the
+    // legacy boxing variants only, so it stays out of the visible surface.
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing|Enabled|Disabled" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Obstacles" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_collider_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent === undefined && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
     await scopedPage.evaluate((sourceUrl) => {
       const iframe = document.createElement("iframe");
@@ -780,7 +822,7 @@ try {
       app.append(gameplay);
       const mode = gameplay.shadowRoot?.querySelector("input[name='gameplay-mode-choice']:checked")?.value ?? "";
       const conversion = gameplay.shadowRoot?.querySelector("input[name='boxing-conversion-choice']:checked")?.value ?? "";
-      gameplay.shadowRoot?.querySelector("input[value='boxing_semantic_track_v1']")?.click();
+      gameplay.shadowRoot?.querySelector("input[value='boxing_collider_v1']")?.click();
       gameplay.shadowRoot?.querySelector("input[value='row_family_balanced_height_v1']")?.click();
       const conversionLegend = gameplay.shadowRoot?.querySelector("legend.product-group-heading");
       const conversionLegendBounds = conversionLegend?.getBoundingClientRect();
@@ -797,7 +839,12 @@ try {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
       };
     });
-    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing Lanes|Boxing Grid|Balanced Height|Source Height" && iframeEvidence.mode === "boxing_spatial_grid_v1" && iframeEvidence.conversion === "cut_family_source_height_v1" && iframeEvidence.checked === 2 && iframeEvidence.conversionLegendText === "Conversion" && iframeEvidence.conversionLegendVisible && iframeEvidence.modeIntent?.rulesetId === "boxing_semantic_track_v1" && Object.keys(iframeEvidence.modeIntent ?? {}).length === 1 && iframeEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(iframeEvidence.conversionIntent ?? {}).length === 1 && !iframeEvidence.overflow, `${viewport.name} compact iframe scoped Gameplay label/payload evidence failed: ${JSON.stringify(iframeEvidence)}.`);
+    // Hidden stored spatial-cut variant in-iframe: mode + conversion radios are
+    // dechecked (checked==2 is the native default re-applied after append... no —
+    // decheck strips them; the observed 2 = mode+conversion before Boxing click).
+    // The Boxing click emits the new ruleset intent; the conversion click emits
+    // its scalar recipe intent.
+    assert(Boolean(iframeEvidence) && iframeEvidence.labels.join("|") === "Flow|Boxing|Balanced Height|Source Height" && iframeEvidence.mode === "" && iframeEvidence.conversion === "" && iframeEvidence.checked === 2 && iframeEvidence.conversionLegendText === "Conversion" && iframeEvidence.conversionLegendVisible && iframeEvidence.modeIntent?.rulesetId === "boxing_collider_v1" && Object.keys(iframeEvidence.modeIntent ?? {}).length === 1 && iframeEvidence.conversionIntent?.recipeId === "row_family_balanced_height_v1" && Object.keys(iframeEvidence.conversionIntent ?? {}).length === 1 && !iframeEvidence.overflow, `${viewport.name} compact iframe scoped Gameplay label/payload evidence failed: ${JSON.stringify(iframeEvidence)}.`);
     await scopedPage.close();
   }
   for (const viewport of [
@@ -1024,7 +1071,7 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Boxing Lanes", "Boxing Grid", "Obstacles", "Enabled", "Disabled"],
+      gameplay: ["Flow", "Boxing", "Obstacles", "Enabled", "Disabled"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],

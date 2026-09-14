@@ -565,11 +565,18 @@ const prototypeOptions = Object.freeze([
   Object.freeze({ id: "semantic-cut", label: "Semantic Track · Cut Family", rulesetId: "boxing_semantic_track_v1", recipeId: conversionRecipeIds[1] }),
   Object.freeze({ id: "spatial-cut", label: "Spatial Grid · Cut Family", rulesetId: "boxing_spatial_grid_v1", recipeId: conversionRecipeIds[1] })
 ]);
+/**
+ * Visible v1 product-surface modes: exactly Flow and Boxing. Boxing is the
+ * new collider ruleset (boxing_collider_v1); the legacy Lanes/Grid rulesets
+ * stay in contracts/persistence for stored-package playback but are no longer
+ * offered as visible options (hidden-variant pattern, like the scale fields).
+ */
 const gameplayModeOptions = Object.freeze([
   Object.freeze({ id: "flow_colliders_v1", label: "Flow", profileClass: "", profileVersion: "", contentHash: "" }),
-  Object.freeze({ id: "boxing_semantic_track_v1", label: "Boxing Lanes", profileClass: "", profileVersion: "", contentHash: "" }),
-  Object.freeze({ id: "boxing_spatial_grid_v1", label: "Boxing Grid", profileClass: "", profileVersion: "", contentHash: "" })
+  Object.freeze({ id: "boxing_collider_v1", label: "Boxing", profileClass: "", profileVersion: "", contentHash: "" })
 ]);
+/** Hidden-but-still-resolvable boxing rulesets for stored-package playback. */
+const hiddenGameplayRulesetIds = Object.freeze(["boxing_semantic_track_v1", "boxing_spatial_grid_v1"]);
 const boxingConversionOptions = Object.freeze([
   Object.freeze({ id: conversionRecipeIds[0], label: "Balanced Height", profileClass: "", profileVersion: "", contentHash: "" }),
   Object.freeze({ id: conversionRecipeIds[1], label: "Source Height", profileClass: "", profileVersion: "", contentHash: "" })
@@ -1004,15 +1011,31 @@ function calibrationMessage(state) { const messages = /** @type {Readonly<Record
 /** @typedef {Readonly<{class:string,active:ProfileIdentity,profiles:readonly ProfileIdentity[],experimental:boolean,selectedContentHash:string,appliedContentHash:string,pendingContentHash:string|null,regenerationRequired:boolean}>} ProfileClassState */
 /** @typedef {Readonly<{id:string,label:string,profileClass:string,profileVersion:string,contentHash:string}>} ProductRadioOption */
 
-/** Scoped Gameplay derives independent controls from exact scalar state. @param {Readonly<{rulesetId:string,recipeId:string}>} selectedVariant @param {string} obstacleMode @returns {string} */
+/**
+ * Scoped Gameplay derives independent controls from exact scalar state. A
+ * stored package whose variant is a hidden legacy ruleset (Lanes/Grid) still
+ * selects/plays that variant: no visible radio is checked and a data-intact
+ * notice explains the stored choice instead of silently re-mapping it.
+ *
+ * @param {Readonly<{rulesetId:string,recipeId?:string}>} selectedVariant
+ * @param {string} obstacleMode
+ * @returns {string}
+ */
 function gameplayProductMarkup(selectedVariant, obstacleMode) {
-  const modeIndex = Math.max(0, gameplayModeOptions.findIndex((option) => option.id === selectedVariant.rulesetId));
-  const boxing = selectedVariant.rulesetId === "boxing_semantic_track_v1" || selectedVariant.rulesetId === "boxing_spatial_grid_v1";
+  const modeIndex = gameplayModeOptions.findIndex((option) => option.id === selectedVariant.rulesetId);
+  const hiddenStored = modeIndex < 0 && hiddenGameplayRulesetIds.includes(selectedVariant.rulesetId);
+  const boxing = selectedVariant.rulesetId !== "flow_colliders_v1";
   const conversionIndex = Math.max(0, boxingConversionOptions.findIndex((option) => option.id === selectedVariant.recipeId));
-  const conversion = boxing ? `<fieldset part="conversion-choices"><legend class="product-group-heading">Conversion</legend>${productRadioChoicesMarkup("boxing-conversion-choice", boxingConversionOptions, conversionIndex, "boxing-conversion-select")}</fieldset>` : "";
+  const conversion = boxing && typeof selectedVariant.recipeId === "string" && selectedVariant.recipeId !== "" ? `<fieldset part="conversion-choices"><legend class="product-group-heading">Conversion</legend>${productRadioChoicesMarkup("boxing-conversion-choice", boxingConversionOptions, conversionIndex, "boxing-conversion-select")}</fieldset>` : "";
   const obstacleIndex=Math.max(0,flowObstacleOptions.findIndex((option)=>option.id===obstacleMode));
   const obstacles=!boxing?`<fieldset part="obstacle-choices"><legend class="product-group-heading">Obstacles</legend>${productRadioChoicesMarkup("flow-obstacle-choice",flowObstacleOptions,obstacleIndex,"flow-obstacle-mode-select")}</fieldset>`:"";
-  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">Gameplay</h2><fieldset part="choices"><legend class="visually-hidden">Choose Gameplay</legend>${productRadioChoicesMarkup("gameplay-mode-choice", gameplayModeOptions, modeIndex, "gameplay-mode-select")}</fieldset>${conversion}${obstacles}</section>${productRadioStyles}`;
+  const hiddenNotice = hiddenStored ? `<p class="muted" part="stored-variant-notice">This package plays its stored ${escapeHtml(selectedVariant.rulesetId)} variant; choose Flow or Boxing to start a new session.</p>` : "";
+  // A hidden stored variant keeps NO visible control in the checked state:
+  // strip the browser's native first-radio default-checked from every group so
+  // the selector visibly reflects "your stored choice is hidden but intact".
+  const decheck = (markup) => hiddenStored ? markup.replace(/\schecked/gu, "") : markup;
+  const choices = decheck(productRadioChoicesMarkup("gameplay-mode-choice", gameplayModeOptions, modeIndex, "gameplay-mode-select"));
+  return `<section class="panel product-selector" part="panel" aria-labelledby="product-selector-heading"><h2 id="product-selector-heading">Gameplay</h2><fieldset part="choices"><legend class="visually-hidden">Choose Gameplay</legend>${choices}</fieldset>${hiddenNotice}${decheck(conversion)}${decheck(obstacles)}</section>${productRadioStyles}`;
 }
 
 /** Native product radio group with no development identity text. @param {string} heading @param {string} name @param {readonly ProductRadioOption[]} options @param {number} selectedIndex @param {string} intent @returns {string} */
