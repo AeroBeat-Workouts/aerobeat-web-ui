@@ -121,9 +121,16 @@ try {
     const pause = document.createElement("aero-tracking-pause");
     pause.setSnapshot({ active: false });
     document.body.append(pause);
-    pause.setSnapshot({ active: true, message: "Tracking lost" });
+    // Loss state with a dropped left wrist: names the missing anchor.
+    pause.setSnapshot({ active: true, message: "Tracking paused", anchors: [{ anchor: "nose", valid: true }, { anchor: "left_wrist", valid: false }, { anchor: "right_wrist", valid: true }] });
     await Promise.resolve();
-    const pauseFocused = pause.shadowRoot?.activeElement?.getAttribute("data-intent") ?? "";
+    const lossMessage = pause.shadowRoot?.querySelector("#tracking-message")?.textContent ?? "";
+    const lossFocused = pause.shadowRoot?.activeElement?.getAttribute("data-intent") ?? "";
+    // Recovery state: shows reconnecting copy instead of which-anchor.
+    pause.setSnapshot({ active: true, recoveryInProgress: true, anchors: [{ anchor: "nose", valid: true }, { anchor: "left_wrist", valid: true }, { anchor: "right_wrist", valid: true }] });
+    await Promise.resolve();
+    const recoveryMessage = pause.shadowRoot?.querySelector("#tracking-message")?.textContent ?? "";
+    const recoveryHeading = pause.shadowRoot?.querySelector("#tracking-heading")?.textContent ?? "";
     pause.setSnapshot({ active: false });
     await Promise.resolve();
     const focusRestored = document.activeElement === returnButton;
@@ -426,8 +433,11 @@ try {
       deleteBeforeConfirm,
       confirmationVisible,
       confirmedDelete,
-      pauseFocused,
+      lossFocused,
       focusRestored,
+      lossMessage,
+      recoveryMessage,
+      recoveryHeading,
       stablePreview,
       stableSurface,
       mutationText,
@@ -556,7 +566,10 @@ try {
   assert(adversarial.arrowProfileId === "flow" && adversarial.focusedRadioId === "flow", "Arrow-key radio navigation did not wrap, select and focus the adjacent profile.");
   assert(adversarial.radioTabIndexes.filter((value) => value === 0).length === 1, "Prototype radio group did not expose one roving tab stop.");
   assert(adversarial.deleteBeforeConfirm === 0 && adversarial.confirmationVisible && adversarial.confirmedDelete === "confirm-package", "Library deletion did not require explicit confirmation.");
-  assert(adversarial.pauseFocused === "calibration-reset" && adversarial.focusRestored, "Tracking alert dialog did not move and restore focus.");
+  assert(adversarial.lossFocused === "calibration-reset" && adversarial.focusRestored, "Tracking alert dialog did not move and restore focus.");
+  assert(adversarial.lossMessage.includes("Left wrist lost"), "Tracking loss overlay did not name the dropped anchor: " + adversarial.lossMessage);
+  assert(!adversarial.lossMessage.includes("Recalibrate to continue"), "Tracking loss overlay should use which-anchor copy, not the generic recalibrate message.");
+  assert(adversarial.recoveryMessage.includes("Resuming") && adversarial.recoveryHeading === "Reconnecting", "Recovery state did not show reconnecting copy instead of full T-pose instruction.");
   assert(adversarial.stablePreview && adversarial.stableSurface, "Calibration snapshot replacement destroyed media or renderer attachment surfaces.");
   assert(adversarial.mutationText.includes("Before mutation") && !adversarial.mutationText.includes("After mutation"), "External snapshot mutation changed presenter state after reconnect.");
   assert(adversarial.canonicalDirectAccepted && adversarial.getterCalls === 0 && adversarial.injectedElements === 0 && adversarial.hostileIdentityRejected && adversarial.hostileBoundsRejected, "Canonical identity acceptance or atomic zero-getter hostile rejection failed.");

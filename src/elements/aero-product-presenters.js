@@ -466,13 +466,17 @@ export class AeroTrackingPause extends AeroPresenterElement {
 
   render() {
     const active = readBoolean(this.presenterSnapshot, "active", false);
-    const message = readString(this.presenterSnapshot, "message", "Tracking paused. Recalibrate to continue.");
+    const recoveryInProgress = readBoolean(this.presenterSnapshot, "recoveryInProgress", false);
+    const anchors = readAnchorVisibility(this.presenterSnapshot);
     const reason = readString(this.presenterSnapshot, "reason", "tracking_lost");
+    const message = recoveryInProgress
+      ? "Resuming — keep your head and both wrists in view."
+      : trackingLossMessage(readString(this.presenterSnapshot, "message", "Tracking paused."), anchors);
     if (active && !this.dialogActive) this.returnFocus = deepActiveElement();
     const restoreFocus = !active && this.dialogActive ? this.returnFocus : null;
     this.dialogActive = active;
     this.toggleAttribute("hidden", !active);
-    this.renderMarkup(`<section class="overlay" part="overlay" role="alertdialog" aria-modal="true" aria-labelledby="tracking-heading" aria-describedby="tracking-message"><h2 id="tracking-heading">Workout paused</h2><p id="tracking-message">${escapeHtml(message)}</p><span class="pill">${escapeHtml(reason)}</span><button part="recalibrate-button" type="button" data-intent="calibration-reset">Recalibrate</button></section><style>:host{inset:0;position:absolute;z-index:20}:host([hidden]){display:none}.overlay{align-content:center;background:rgba(4,17,30,var(--aero-overlay-dim-opacity,.72));block-size:100%;color:#fff;display:grid;gap:14px;inline-size:100%;justify-items:center;padding:24px;text-align:center}</style>`);
+    this.renderMarkup(`<section class="overlay" part="overlay" role="alertdialog" aria-modal="true" aria-labelledby="tracking-heading" aria-describedby="tracking-message"><h2 id="tracking-heading">${recoveryInProgress ? "Reconnecting" : "Workout paused"}</h2><p id="tracking-message">${escapeHtml(message)}</p><span class="pill">${escapeHtml(recoveryInProgress ? "recovery" : reason)}</span><button part="recalibrate-button" type="button" data-intent="calibration-reset">Recalibrate</button></section><style>:host{inset:0;position:absolute;z-index:20}:host([hidden]){display:none}.overlay{align-content:center;background:rgba(4,17,30,var(--aero-overlay-dim-opacity,.72));block-size:100%;color:#fff;display:grid;gap:14px;inline-size:100%;justify-items:center;padding:24px;text-align:center}</style>`);
     queueMicrotask(() => {
       if (active) {
         const action = this.shadowRoot?.querySelector("button[data-intent='calibration-reset']");
@@ -721,6 +725,46 @@ function readNumber(record, key, fallback) { const value = record[key]; return t
 function readStorageBytes(record, key) { return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(readNumber(record, key, 0)))); }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @param {boolean} fallback @returns {boolean} */
 function readBoolean(record, key, fallback) { const value = record[key]; return typeof value === "boolean" ? value : fallback; }
+
+/**
+ * Read the three loss-decision anchor visibility states from the presenter
+ * snapshot. Returns a map of anchor name to visibility (true = visible/stable).
+ * @param {Readonly<Record<string, unknown>>} record
+ * @returns {Readonly<Record<string, boolean>>}
+ */
+function readAnchorVisibility(record) {
+  const result = /** @type {Record<string, boolean>} */ ({ nose: true, left_wrist: true, right_wrist: true });
+  const anchors = Array.isArray(record["anchors"]) ? record["anchors"] : [];
+  for (const entry of anchors) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const anchor = /** @type {Record<string, unknown>} */ (entry);
+    const name = typeof anchor["anchor"] === "string" ? anchor["anchor"] : null;
+    if (name === "nose" || name === "left_wrist" || name === "right_wrist") {
+      result[name] = anchor["valid"] === true;
+    }
+  }
+  return Object.freeze(result);
+}
+
+/**
+ * Build which-anchor tracking-loss copy. Names the dropped anchor(s) so the
+ * player knows what to put back in view.
+ * @param {string} baseMessage
+ * @param {Readonly<Record<string, boolean>>} visibility
+ * @returns {string}
+ */
+function trackingLossMessage(baseMessage, visibility) {
+  const missing = [];
+  if (!visibility.nose) missing.push("head");
+  if (!visibility.left_wrist) missing.push("left wrist");
+  if (!visibility.right_wrist) missing.push("right wrist");
+  if (missing.length === 0) return `${baseMessage} Keep your head and both wrists in view.`;
+  const label = missing.length === 1 ? capitalize(missing[0]) : missing.slice(0, -1).join(", ") + " and " + missing.at(-1);
+  return `${label} lost — keep your head and both wrists in view`;
+}
+
+/** @param {string} value @returns {string} */
+function capitalize(value) { return value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value; }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @returns {Readonly<Record<string, unknown>> | null} */
 function readRecord(record, key) { const value = record[key]; return isPlainRecord(value) ? value : null; }
 /** @param {Readonly<Record<string, unknown>>} record @param {string} key @returns {Readonly<Record<string, unknown>>[]} */
