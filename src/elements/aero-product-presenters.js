@@ -32,6 +32,9 @@ const sharedStyles = `
   label { display: grid; font-size: .78rem; font-weight: 750; gap: 4px; }
   .live { min-block-size: 1.25em; }
   .pill { background: rgba(43,142,183,.12); border-radius: 999px; display: inline-flex; font-size: .74rem; font-weight: 800; padding: 4px 8px; }
+  .difficulty-tag { border: 1px solid rgba(16,52,71,.3); border-radius: 50%; display: inline-block; flex: 0 0 14px; block-size: 14px; inline-size: 14px; vertical-align: middle; }
+  .difficulty-choice { align-items: center; display: inline-flex; flex-wrap: wrap; gap: 6px; min-inline-size: 0; }
+  .difficulty-choice select { flex: 1 1 auto; inline-size: auto; }
   .error { color: var(--aero-color-error, #9f1d24); }
   .cards { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
   .card { background: rgba(255,255,255,.72); border: 1px solid rgba(53,141,175,.3); border-radius: 10px; display: grid; gap: 6px; padding: 10px; text-align: start; }
@@ -879,18 +882,23 @@ function statusText(state, count) { if (state === "loading") return "Loading Bea
 function mapResultMarkup(result, checked) { const id = readString(result, "mapId", ""); const name = readString(result, "name", "Untitled map"); const author = readString(result, "songAuthorName", "Unknown artist"); return `<article><label class="card choice-radio" part="result"><input type="radio" name="beatsaver-map-choice" value="${escapeAttribute(id)}" data-intent="beatsaver-select-map" data-value="${escapeAttribute(id)}" ${checked ? "checked" : ""}><span class="choice-copy"><strong>${escapeHtml(name)}</strong><span class="muted">${escapeHtml(author)} · ${escapeHtml(id)}</span></span></label></article>`; }
 /** @param {string} value @param {string} label @param {string} selected @returns {string} */
 function optionMarkup(value, label, selected) { return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`; }
+/** Visual-only difficulty marker shared by remote and downloaded lists. @param {string} difficulty @returns {string} */
+export function difficultyTagMarkup(difficulty) {
+  const colors = /** @type {Readonly<Record<string, string>>} */ ({ Easy: "#2ecc40", Normal: "#ff851b", Hard: "#ff4136", Expert: "#a30000", ExpertPlus: "#000000" });
+  return `<span class="difficulty-tag" style="background:${colors[difficulty] ?? "#808080"}" aria-hidden="true"></span>`;
+}
 /** @typedef {Readonly<{state:"idle"|"loading"|"playing"|"ended"|"error",mapId:string,versionHash:string,packageId:string,errorMessage:string}>} PreviewSnapshot */
 
 /** Default selected-map markup remains byte-for-byte compatible when compact mode is absent. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versions @param {readonly string[]} difficulties @param {string} selectedVersion @param {string} selectedDifficulty @returns {string} */
 function defaultBeatSaverDetailMarkup(selected, versions, difficulties, selectedVersion, selectedDifficulty) {
   return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(readString(selected, "name", "Selected map"))}</h3><p class="muted">${escapeHtml(readString(selected, "songAuthorName", ""))} · mapped by ${escapeHtml(readString(selected, "levelAuthorName", "Unknown"))}</p>
           <label><span class="compact-field-label">Version</span><select aria-label="Version" part="version-select" data-intent="beatsaver-version-select">${versions.map((version) => optionMarkup(readString(version, "versionHash", ""), readString(version, "label", readString(version, "versionHash", "Version")), selectedVersion)).join("")}</select></label>
-          <label><span class="compact-field-label">Difficulty</span><select aria-label="Difficulty" part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select></label>
+          <label><span class="compact-field-label">Difficulty</span><span class="difficulty-choice"><select aria-label="Difficulty" part="difficulty-select" data-intent="beatsaver-difficulty-select">${difficulties.map((difficulty) => optionMarkup(difficulty, difficulty, selectedDifficulty)).join("")}</select>${difficultyTagMarkup(selectedDifficulty || difficulties[0] || "")}</span></label>
           <button part="import-button" type="button" data-intent="beatsaver-import" ${selectedVersion && selectedDifficulty ? "" : "disabled"}>Import selected map</button></section>`;
 }
 
-/** Compact selected-map markup exposes version-level Preview and Download only. Difficulty belongs to downloaded songs. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versionRecords @param {readonly string[]} _difficultyValues @param {string} selectedVersion @param {string} _selectedDifficulty @param {PreviewSnapshot} preview @returns {string} */
-function compactBeatSaverDetailMarkup(selected, versionRecords, _difficultyValues, selectedVersion, _selectedDifficulty, preview) {
+/** Compact selected-map markup exposes version-level Preview and Download only; difficulty is visual, not selectable. @param {Readonly<Record<string, unknown>>} selected @param {readonly Readonly<Record<string, unknown>>[]} versionRecords @param {readonly string[]} difficulties @param {string} selectedVersion @param {string} _selectedDifficulty @param {PreviewSnapshot} preview @returns {string} */
+function compactBeatSaverDetailMarkup(selected, versionRecords, difficulties, selectedVersion, _selectedDifficulty, preview) {
   const mapId = readBoundedString(selected, "mapId", "", 256);
   const mapName = readBoundedString(selected, "name", "Selected map", 256);
   const versions = versionRecords.filter((version) => readBoundedString(version, "versionHash", "", 256) !== "").slice(0, 32);
@@ -900,7 +908,7 @@ function compactBeatSaverDetailMarkup(selected, versionRecords, _difficultyValue
   const previewError = exactPreview && preview.state === "error" ? preview.errorMessage : "";
   const previewLabel = previewActive ? "Stop" : "Preview";
   const versionField = compactChoiceFieldMarkup("Version", "version-select", "beatsaver-version-select", versions.map((version) => ({ value: readBoundedString(version, "versionHash", "", 256), label: readBoundedString(version, "label", readBoundedString(version, "versionHash", "Version", 256), 256) })), effectiveVersion);
-  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(mapName)}</h3><button class="compact-preview-action" part="preview-button" type="button" data-intent="beatsaver-preview-toggle" aria-label="${previewLabel} ${escapeAttribute(mapName)}" aria-pressed="${previewActive}" aria-busy="${preview.state === "loading" && exactPreview}" ${effectiveVersion ? "" : "disabled"}>${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${versionField}<button part="import-button" type="button" data-intent="beatsaver-import" ${effectiveVersion ? "" : "disabled"}>Download</button></section>`;
+  return `<section class="card" part="detail" aria-label="Selected map"><h3>${escapeHtml(mapName)}</h3><button class="compact-preview-action" part="preview-button" type="button" data-intent="beatsaver-preview-toggle" aria-label="${previewLabel} ${escapeAttribute(mapName)}" aria-pressed="${previewActive}" aria-busy="${preview.state === "loading" && exactPreview}" ${effectiveVersion ? "" : "disabled"}>${previewLabel}</button>${previewError ? `<p class="error" role="status" aria-live="polite">${escapeHtml(previewError)}</p>` : ""}${versionField}${difficulties.length ? `<span class="difficulty-choice" aria-label="Available difficulties">${difficulties.map((difficulty) => `<span class="difficulty-choice">${escapeHtml(difficulty)}${difficultyTagMarkup(difficulty)}</span>`).join(" ")}</span>` : ""}<button part="import-button" type="button" data-intent="beatsaver-import" ${effectiveVersion ? "" : "disabled"}>Download</button></section>`;
 }
 
 /** @typedef {Readonly<{value:string,label:string}>} CompactChoice */
@@ -985,7 +993,7 @@ function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pen
     positions.set(song.songName, position);
     const label = (totals.get(song.songName) ?? 0) > 1 ? `${song.songName} · ${position}` : song.songName;
     labels[index] = label;
-    return `<label class="compact-library-choice" part="item"><input type="radio" name="library-song-choice" value="${escapeAttribute(song.collectionId)}" data-intent="library-select" data-value="${escapeAttribute(song.collectionId)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedIndex ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
+    return `<label class="compact-library-choice" part="item"><input type="radio" name="library-song-choice" value="${escapeAttribute(song.collectionId)}" data-intent="library-select" data-value="${escapeAttribute(song.collectionId)}" aria-label="Select ${escapeAttribute(label)}" ${index === checkedIndex ? "checked" : ""}><span>${escapeHtml(label)}</span>${difficultyTagMarkup(song.difficulties.find((difficulty) => difficulty.packageId === song.activePackageId)?.difficultyId ?? song.difficulties[0].difficultyId)}</label>`;
   }).join("");
   const selected = checkedIndex >= 0 ? songs[checkedIndex] : null;
   const actions = selected ? compactLibraryActions(selected, pendingPackageId, pendingDeleteCollectionId, labels[checkedIndex] ?? selected.songName, preview) : "";
@@ -1004,8 +1012,8 @@ function compactLibraryActions(song, pendingPackageId, pendingDeleteCollectionId
   const difficulty = song.difficulties.find((entry) => entry.packageId === selectedPackageId) ?? song.difficulties[0];
   const difficultyLabel = `Difficulty for ${label}`;
   const difficultyField = song.difficulties.length === 1
-    ? `<div class="compact-singleton-field" part="difficulty-select"><span>Difficulty</span><output aria-label="${escapeAttribute(difficultyLabel)}">${escapeHtml(difficulty.label)}</output></div>`
-    : `<label><span class="compact-field-label">Difficulty</span><select aria-label="${escapeAttribute(difficultyLabel)}" part="difficulty-select" data-intent="library-difficulty-select" data-collection-id="${escapeAttribute(song.collectionId)}">${song.difficulties.map((entry) => optionMarkup(entry.packageId, entry.label, selectedPackageId)).join("")}</select></label>`;
+    ? `<div class="compact-singleton-field" part="difficulty-select"><span>Difficulty</span><output aria-label="${escapeAttribute(difficultyLabel)}" class="difficulty-choice">${escapeHtml(difficulty.label)}${difficultyTagMarkup(difficulty.difficultyId)}</output></div>`
+    : `<label><span class="compact-field-label">Difficulty</span><span class="difficulty-choice"><select aria-label="${escapeAttribute(difficultyLabel)}" part="difficulty-select" data-intent="library-difficulty-select" data-collection-id="${escapeAttribute(song.collectionId)}">${song.difficulties.map((entry) => optionMarkup(entry.packageId, entry.label, selectedPackageId)).join("")}</select>${difficultyTagMarkup(difficulty.difficultyId)}</span></label>`;
   const deleteControls = pendingDelete
     ? `<span role="status">Delete ${escapeHtml(label)}?</span><button type="button" aria-label="Confirm delete ${accessibleLabel}" data-intent="library-delete" data-value="${escapeAttribute(song.collectionId)}">Confirm</button><button type="button" aria-label="Cancel deleting ${accessibleLabel}" data-intent="library-delete-cancel" data-value="${escapeAttribute(song.collectionId)}">Cancel</button>`
     : `<button type="button" aria-label="Delete ${accessibleLabel}" data-intent="library-delete-request" data-value="${escapeAttribute(song.collectionId)}">Delete</button>`;
@@ -1022,7 +1030,7 @@ function libraryItemMarkup(item, pendingDeletePackageId, checked) {
   const deleteControls = pending
     ? `<span role="status">Delete ${escapeHtml(name)}?</span><button type="button" aria-label="Confirm delete ${accessibleName}" data-intent="library-delete" data-value="${escapeAttribute(id)}">Confirm delete</button><button type="button" aria-label="Cancel deleting ${accessibleName}" data-intent="library-delete-cancel" data-value="${escapeAttribute(id)}">Cancel</button>`
     : `<button type="button" aria-label="Delete ${accessibleName}" data-intent="library-delete-request" data-value="${escapeAttribute(id)}">Delete</button>`;
-  return `<article class="card" part="item"><label class="choice-radio"><input type="radio" name="library-package-choice" value="${escapeAttribute(id)}" data-intent="library-select" data-value="${escapeAttribute(id)}" aria-label="Select ${accessibleName}" ${checked ? "checked" : ""}><span class="choice-copy"><strong>${escapeHtml(name)}</strong><span class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</span></span></label><div class="row"><button type="button" aria-label="Export ${accessibleName}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div></article>`;
+  return `<article class="card" part="item"><label class="choice-radio"><input type="radio" name="library-package-choice" value="${escapeAttribute(id)}" data-intent="library-select" data-value="${escapeAttribute(id)}" aria-label="Select ${accessibleName}" ${checked ? "checked" : ""}><span class="choice-copy"><strong class="difficulty-choice">${escapeHtml(name)}${difficultyTagMarkup(readString(item, "difficulty", ""))}</strong><span class="muted">${variantCount} playable variant${variantCount === 1 ? "" : "s"}</span></span></label><div class="row"><button type="button" aria-label="Export ${accessibleName}" data-intent="library-export" data-value="${escapeAttribute(id)}">Export</button>${deleteControls}</div></article>`;
 }
 /** @param {number} used @param {number} quota @returns {string} */
 function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used)} stored · quota unavailable`; if (used > quota) return `${formatBytes(used)} of ${formatBytes(quota)} used · over quota`; return `${formatBytes(used)} of ${formatBytes(quota)} used (${Math.round((used / quota) * 100)}%)`; }

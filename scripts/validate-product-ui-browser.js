@@ -67,6 +67,33 @@ try {
   const selectedImport = result.intents.find((intent) => intent.type === "beatsaver-import");
   assert(selectedImport?.payload.mapId === "4858" && selectedImport.payload.versionHash === "a".repeat(40) && selectedImport.payload.difficultyId === "Expert", "Selected-map import intent omitted exact map/version/difficulty IDs.");
   assert(result.intents.find((intent) => intent.type === "beatsaver-difficulty-select")?.payload.difficultyId === "Hard", "Difficulty selection intent lost its stable ID.");
+  const difficultyEvidence = await page.evaluate(async () => {
+    const { difficultyTagMarkup } = await import("/src/elements/aero-product-presenters.js");
+    const colors = Object.fromEntries(["Easy", "Normal", "Hard", "Expert", "ExpertPlus", "Other"].map((difficulty) => [difficulty, difficultyTagMarkup(difficulty)]));
+    const remote = document.createElement("aero-beatsaver-browser");
+    document.body.append(remote);
+    remote.setSnapshot({ selectedMap: { mapId: "map", name: "Remote" }, versions: [{ versionHash: "hash", label: "Version" }], difficulties: ["Easy", "Normal", "Hard", "Expert", "ExpertPlus"], selectedVersionHash: "hash", selectedDifficulty: "ExpertPlus" });
+    const defaultRemote = remote.shadowRoot?.querySelector("[part='detail'] .difficulty-tag");
+    const defaultSelect = remote.shadowRoot?.querySelector("select[data-intent='beatsaver-difficulty-select']");
+    remote.compact = true;
+    const compactRemoteTags = remote.shadowRoot?.querySelectorAll("[part='detail'] .difficulty-tag") ?? [];
+    const library = document.createElement("aero-content-library");
+    document.body.append(library);
+    library.setSnapshot({ packages: [{ packageId: "package", name: "Downloaded", difficulty: "Hard" }] });
+    const defaultLibrary = library.shadowRoot?.querySelector("[part='item'] .difficulty-tag");
+    library.compact = true;
+    library.setSnapshot({ songs: [{ collectionId: "song", songName: "Downloaded", activePackageId: "hard", difficulties: [{ difficultyId: "Hard", label: "Hard", packageId: "hard" }, { difficultyId: "Expert", label: "Expert", packageId: "expert" }] }] });
+    const compactLibrary = library.shadowRoot?.querySelector(".compact-library-choice .difficulty-tag");
+    const librarySelect = library.shadowRoot?.querySelector("select[data-intent='library-difficulty-select']");
+    librarySelect.value = "expert";
+    librarySelect.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    const selectedLibraryTag = library.shadowRoot?.querySelector(".compact-library-actions .difficulty-tag");
+    const evidence = { colors, defaultRemote: defaultRemote?.getAttribute("style"), defaultSelect: defaultSelect?.tagName, compactRemote: compactRemoteTags.length, defaultLibrary: defaultLibrary?.getAttribute("style"), compactLibrary: compactLibrary?.getAttribute("style"), librarySelect: librarySelect?.tagName, selectedLibraryTag: selectedLibraryTag?.getAttribute("style") };
+    remote.remove(); library.remove();
+    return evidence;
+  });
+  for (const [difficulty, color] of Object.entries({ Easy: "#2ecc40", Normal: "#ff851b", Hard: "#ff4136", Expert: "#a30000", ExpertPlus: "#000000", Other: "#808080" })) assert(difficultyEvidence.colors[difficulty].includes(`style="background:${color}"`), `Difficulty tag color mismatch for ${difficulty}.`);
+  assert(difficultyEvidence.defaultRemote?.includes("#000000") && difficultyEvidence.defaultSelect === "SELECT" && difficultyEvidence.compactRemote === 5 && difficultyEvidence.defaultLibrary?.includes("#ff4136") && difficultyEvidence.compactLibrary?.includes("#ff4136") && difficultyEvidence.librarySelect === "SELECT" && difficultyEvidence.selectedLibraryTag?.includes("#a30000"), `Difficulty tags missing from remote/downloaded lists or broke native selection: ${JSON.stringify(difficultyEvidence)}.`);
   assert(result.intents.find((intent) => intent.type === "content-import-cancel")?.payload.jobId === "job-1", "Import cancellation lost its job ID.");
   assert(result.intents.find((intent) => intent.type === "library-delete")?.payload.packageId === "package-1", "Library deletion lost its package ID.");
   const profile = result.intents.find((intent) => intent.type === "prototype-select");
@@ -890,7 +917,7 @@ try {
       const radios = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("input[type='radio']") ?? [])]);
       const buttons = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("button") ?? [])]);
       const selects = hosts.flatMap((host) => [...(host.shadowRoot?.querySelectorAll("select") ?? [])]);
-      const localLabels = [...(library.shadowRoot?.querySelectorAll(".compact-library-choice span") ?? [])].map((label) => label.textContent?.trim() ?? "");
+      const localLabels = [...(library.shadowRoot?.querySelectorAll(".compact-library-choice > span:not(.difficulty-tag)") ?? [])].map((label) => label.textContent?.trim() ?? "");
       const localActions = [...(library.shadowRoot?.querySelectorAll(".compact-library-actions button") ?? [])];
       const initialCheckedValues = hosts.map((host) => host.shadowRoot?.querySelector("input[type='radio']:checked")?.value ?? "");
       const initialLocalDifficulty = library.shadowRoot?.querySelector("output")?.textContent?.trim() ?? "";
@@ -1073,7 +1100,7 @@ try {
     const expectedVisible = {
       gameplay: ["Flow", "Boxing", "Obstacles", "Enabled", "Disabled"],
       visuals: ["Default", "Compact"],
-      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Download"],
+      populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Hard", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],
       importProgress: ["Converting · 63%", "Cancel import"],
       library: ["Alpha Package", "Beta Package", "Preview", "Difficulty", "Expert", "Export", "Delete"],
