@@ -580,10 +580,12 @@ try {
     const scoped = document.querySelector("#scoped-keyboard-test");
     return { checked: scoped?.shadowRoot?.querySelector("input:checked")?.value ?? "", focused: scoped?.shadowRoot?.activeElement?.value ?? "" };
   });
-  // Native radio semantics: arrow selection auto-advances focus, so the next
-  // Tab leaves the (now focused) Obstacles fieldset into its first control.
-  await page.keyboard.press("Tab");
-  const scopedObstacleTab = await page.evaluate(() => { const scoped = document.querySelector("#scoped-keyboard-test"); return scoped?.shadowRoot?.activeElement?.value ?? ""; });
+  // 0.0.86 (Derrick): the redundant Flow "Obstacles" fieldset was removed; the
+  // gameplay/pause `obstaclesEnabled` boolean is the only obstacles control. That
+  // group used to provide the extra in-selector tab stop this test walked
+  // through. The property actually under test is KEYBOARD SCOPING — arrow
+  // advances the checked radio, Tab leaves the shadow root, Shift+Tab returns —
+  // so assert that directly instead of depending on one specific group.
   await page.keyboard.press("Tab");
   const scopedTabExited = await page.evaluate(() => document.activeElement?.id === "after-scoped-keyboard-test");
   await page.keyboard.press("Shift+Tab");
@@ -594,9 +596,9 @@ try {
     document.querySelector("#after-scoped-keyboard-test")?.remove();
     return returned;
   });
-  // Flow checked -> ArrowRight selects Boxing and focuses it; Tab walks through
-  // the visible Obstacles group and then exits the element (and returns).
-  assert(scopedArrow.checked === "boxing_collider_v1" && scopedArrow.focused === "boxing_collider_v1" && scopedObstacleTab === "default" && scopedTabExited && scopedTabReturned === "default", `Scoped native radio Arrow/Tab keyboard behavior failed: ${JSON.stringify({ scopedArrow, scopedObstacleTab, scopedTabExited, scopedTabReturned })}.`);
+  // Flow checked -> ArrowRight selects Boxing and focuses it; with no further
+  // group rendered for Flow, one Tab exits the element and Shift+Tab returns.
+  assert(scopedArrow.checked === "boxing_collider_v1" && scopedArrow.focused === "boxing_collider_v1" && scopedTabExited && scopedTabReturned === "boxing_collider_v1", `Scoped native radio Arrow/Tab keyboard behavior failed: ${JSON.stringify({ scopedArrow, scopedTabExited, scopedTabReturned })}.`);
   await page.evaluate(() => {
     const browser = document.createElement("aero-beatsaver-browser");
     browser.id = "music-map-keyboard-test";
@@ -642,15 +644,22 @@ try {
   // while the visual selector keeps its single active profile checked.
   assert(adversarial.gameplayChecked === 0 && adversarial.visualChecked === 1 && adversarial.gameplaySelected === "" && adversarial.conversionSelected === "" && adversarial.visualSelected === "aero.visual.default", "Scoped selectors did not derive exact hidden-stored-variant state.");
   assert(adversarial.hiddenStoredEvidence.checked === 0 && /stored boxing_semantic_track_v1 variant/u.test(adversarial.hiddenStoredEvidence.noticeText) && adversarial.hiddenStoredEvidence.labels.join("|") === "Flow|Boxing|Balanced Height|Source Height", `Stored hidden-variant resolution failed: ${JSON.stringify(adversarial.hiddenStoredEvidence)}`);
-  // v1 derivation: Flow resolves to its visible radio (mode + obstacle checked);
-  // the four legacy boxing variants are hidden-stored (no radios checked).
-  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_colliders_v1::2|semantic-row:::0|spatial-row:::0|semantic-cut:::0|spatial-cut:::0", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
+  // v1 derivation: Flow resolves to its visible radio (mode checked); the four
+  // legacy boxing variants are hidden-stored (no radios checked).
+  // 0.0.86 (Derrick): the Flow "Obstacles" Enabled/Disabled fieldset was removed
+  // — the gameplay/pause `obstaclesEnabled` boolean is now the only obstacles
+  // control — so the obstacle component is no longer a visible radio selection
+  // and derives to 1 instead of 2. The gameplay intent is still exactly
+  // `{rulesetId:"flow_colliders_v1"}`, asserted on the next line.
+  assert(adversarial.exactVariantMatrix.join("|") === "flow:flow_colliders_v1::1|semantic-row:::0|spatial-row:::0|semantic-cut:::0|spatial-cut:::0", `Exact variant derivation failed: ${adversarial.exactVariantMatrix.join("|")}`);
   assert(adversarial.flowColliderIntent?.rulesetId === "flow_colliders_v1" && Object.keys(adversarial.flowColliderIntent ?? {}).length === 1, "Flow did not emit its exact bounded ruleset intent.");
   assert(adversarial.boxingColliderIntent?.rulesetId === "boxing_collider_v1" && Object.keys(adversarial.boxingColliderIntent ?? {}).length === 1, "Boxing did not emit its exact bounded ruleset intent.");
   assert(!/(schema|ruleset|recipe|hash|profile|scoring|converter|regeneration|bundle|experimental)/iu.test(adversarial.scopedText), `Scoped selectors exposed development text: ${adversarial.scopedText}`);
   assert(adversarial.nativeRadioVisibility, "Scoped product radios were not visibly native, computed, touch-sized radio inputs.");
   assert(adversarial.scopedVisualIntent?.profileClass === "live_visual" && adversarial.scopedVisualIntent.profileId === "aero.visual.compact" && adversarial.scopedVisualIntent.profileVersion === "1.0.0" && adversarial.scopedVisualIntent.contentHash === "e65d53dfaafe8a859c08837acb3d447b10b03508bd5ae64677d273c93657d603", "Scoped Visuals changed the scalar profile-selection intent.");
-  assert(adversarial.gameplayFallbackId === "flow_colliders_v1" && adversarial.gameplayFallbackChecked === 2 && adversarial.visualFallbackId === "aero.visual.default", "Scoped selector first-option fallbacks were not deterministic.");
+  assert(adversarial.gameplayFallbackId === "flow_colliders_v1" && // 0.0.86: the checked fallback radio index moved 2 -> 1 when the two Flow
+  // Obstacles radios were removed, leaving Flow/Boxing as the leading pair.
+  adversarial.gameplayFallbackChecked === 1 && adversarial.visualFallbackId === "aero.visual.default", `Scoped selector first-option fallbacks were not deterministic: ${JSON.stringify({ gfi: adversarial.gameplayFallbackId, gfc: adversarial.gameplayFallbackChecked, vfi: adversarial.visualFallbackId })}`);
   assert(adversarial.scopedAtomicRejection && adversarial.scopedReconnectIntentCount === 1, `Scoped selector atomicity or reconnect listener exactness regressed: ${JSON.stringify({ atomic: adversarial.scopedAtomicRejection, reconnectIntents: adversarial.scopedReconnectIntentCount })}`);
   assert(adversarial.currentMapChecked === "map-beta" && adversarial.fallbackMapChecked === "map-alpha" && adversarial.mapCheckedCounts.join(",") === "1,1,0", "BeatSaver radios did not preserve current selection, first fallback, and empty truth.");
   assert(adversarial.currentPackageChecked === "package-beta" && adversarial.fallbackPackageChecked === "package-alpha" && adversarial.packageCheckedCounts.join(",") === "1,1,0", "Library radios did not preserve current selection, first fallback, and empty truth.");
@@ -820,10 +829,10 @@ try {
       };
     });
     // Visible v1 surface for a FLOW variant: Flow + Boxing mode labels plus
-    // the Obstacles group (2 checked = mode + obstacle default); the Boxing
-    // click emits the new ruleset intent. The conversion group belongs to the
-    // legacy boxing variants only, so it stays out of the visible surface.
-    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing|Enabled|Disabled" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "2,1" && scopedEvidence.conversionLegendText === "Obstacles" && scopedEvidence.conversionLegendVisible && scopedEvidence.modeIntent?.rulesetId === "boxing_collider_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent === undefined && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
+    // 0.0.86 (Derrick): the Flow Obstacles group was removed, so the scoped
+    // gameplay surface is Flow|Boxing with one checked mode radio and no
+    // conversion legend. The Boxing click must still emit the new ruleset intent.
+    assert(Boolean(scopedEvidence) && scopedEvidence.labels[0].join("|") === "Flow|Boxing" && scopedEvidence.labels[1].join("|") === "Default|Compact" && scopedEvidence.checked.join(",") === "1,1" && scopedEvidence.conversionLegendText === "" && scopedEvidence.conversionLegendVisible === false && scopedEvidence.modeIntent?.rulesetId === "boxing_collider_v1" && Object.keys(scopedEvidence.modeIntent ?? {}).length === 1 && scopedEvidence.conversionIntent === undefined && !scopedEvidence.forbiddenText && !scopedEvidence.overflow && scopedEvidence.controlsVisible, `${viewport.name} compact scoped product selector label/payload evidence failed: ${JSON.stringify(scopedEvidence)}.`);
     await scopedPage.screenshot({ path: `screenshots/task12-ui-product-scopes-${viewport.name}.png`, fullPage: true });
     await scopedPage.evaluate((sourceUrl) => {
       const iframe = document.createElement("iframe");
@@ -1098,7 +1107,8 @@ try {
       }
     });
     const expectedVisible = {
-      gameplay: ["Flow", "Boxing", "Obstacles", "Enabled", "Disabled"],
+      // 0.0.86: the Flow Obstacles group was removed; only the mode radios remain.
+      gameplay: ["Flow", "Boxing"],
       visuals: ["Default", "Compact"],
       populated: ["Search", "Latest", "Choose local ZIP", "Alpha Song", "Beta Song", "Preview", "Version", "Current", "Hard", "Download"],
       empty: ["Search", "Latest", "Choose local ZIP"],
