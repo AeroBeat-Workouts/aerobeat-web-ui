@@ -1058,8 +1058,11 @@ function gameplayProductMarkup(selectedVariant, obstacleMode) {
   const boxing = selectedVariant.rulesetId !== "flow_colliders_v1";
   const conversionIndex = Math.max(0, boxingConversionOptions.findIndex((option) => option.id === selectedVariant.recipeId));
   const conversion = boxing && typeof selectedVariant.recipeId === "string" && selectedVariant.recipeId !== "" ? `<fieldset part="conversion-choices"><legend class="product-group-heading">Conversion</legend>${productRadioChoicesMarkup("boxing-conversion-choice", boxingConversionOptions, conversionIndex, "boxing-conversion-select")}</fieldset>` : "";
-  const obstacleIndex=Math.max(0,flowObstacleOptions.findIndex((option)=>option.id===obstacleMode));
-  const obstacles=!boxing?`<fieldset part="obstacle-choices"><legend class="product-group-heading">Obstacles</legend>${productRadioChoicesMarkup("flow-obstacle-choice",flowObstacleOptions,obstacleIndex,"flow-obstacle-mode-select")}</fieldset>`:"";
+  // 0.0.86: Derrick confirmed the redundant Flow "Obstacles" Enabled/Disabled
+  // selector is removed. The single `obstaclesEnabled` boolean at the top of the
+  // gameplay/pause menu is the only obstacles control, and it applies to both
+  // Flow and Boxing.
+  const obstacles="";
   const hiddenNotice = hiddenStored ? `<p class="muted" part="stored-variant-notice">This package plays its stored ${escapeHtml(selectedVariant.rulesetId)} variant; choose Flow or Boxing to start a new session.</p>` : "";
   // A hidden stored variant keeps NO visible control in the checked state:
   // strip the browser's native first-radio default-checked from every group so
