@@ -329,7 +329,7 @@ export class AeroContentLibrary extends AeroPresenterElement {
       const songs = compactDownloadedSongs(this.presenterSnapshot, packages);
       const selectedCollectionId = compactSelectedCollectionId(this.presenterSnapshot, songs, this.pendingSelectedCollectionId, this.pendingSelectedPackageId);
       if (this.pendingDeleteCollectionId && !songs.some((song) => song.collectionId === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
-      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot)));
+      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot), this.pendingBulkDelete === true));
       return;
     }
     if (this.pendingDeleteCollectionId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
@@ -381,6 +381,23 @@ export class AeroContentLibrary extends AeroPresenterElement {
     }
     if (type === "library-delete-cancel") {
       this.pendingDeleteCollectionId = "";
+      this.pendingBulkDelete = false;
+      this.render();
+      return;
+    }
+    // 0.0.87: bulk library actions. Delete All confirms first, like the per-song flow.
+    if (type === "library-delete-all-request") {
+      this.pendingBulkDelete = true;
+      this.render();
+      queueMicrotask(() => {
+        const confirm = this.shadowRoot?.querySelector("button[data-intent='library-delete-all']");
+        if (confirm instanceof HTMLElement) confirm.focus();
+      });
+      return;
+    }
+    if (type === "library-delete-all" || type === "library-reimport-all") {
+      this.pendingBulkDelete = false;
+      this.emitIntent(type, {});
       this.render();
       return;
     }
@@ -980,7 +997,7 @@ function compactSelectedCollectionId(snapshot, songs, pendingCollectionId, pendi
 }
 
 /** @param {readonly CompactDownloadedSong[]} songs @param {string} selectedCollectionId @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} error @param {PreviewSnapshot} preview @returns {string} */
-function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview) {
+function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview, pendingBulkDelete = false) {
   const selectedIndex = songs.findIndex((song) => song.collectionId === selectedCollectionId);
   const checkedIndex = songs.length ? Math.max(0, selectedIndex) : -1;
   const totals = new Map();
@@ -997,7 +1014,15 @@ function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pen
   }).join("");
   const selected = checkedIndex >= 0 ? songs[checkedIndex] : null;
   const actions = selected ? compactLibraryActions(selected, pendingPackageId, pendingDeleteCollectionId, labels[checkedIndex] ?? selected.songName, preview) : "";
-  return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}</section>`;
+  // 0.0.87 (Derrick): "Reimport All" re-imports every downloaded song so a new map
+  // schema is picked up; "Delete All" clears the library and confirms first, the
+  // same two-step the per-song delete already uses.
+  const bulkActions = songs.length > 0
+    ? `<div class="row compact-library-actions" part="bulk-actions" aria-label="All songs actions"><button type="button" class="compact-preview-action" part="reimport-all" data-intent="library-reimport-all" aria-label="Reimport every downloaded song">Reimport All</button>${pendingBulkDelete
+      ? `<button type="button" class="compact-preview-action" part="delete-all-confirm" data-intent="library-delete-all" aria-label="Confirm deleting every downloaded song">Confirm delete all</button><button type="button" class="compact-preview-action" part="delete-all-cancel" data-intent="library-delete-cancel" aria-label="Cancel deleting every downloaded song">Cancel</button>`
+      : `<button type="button" class="compact-preview-action" part="delete-all" data-intent="library-delete-all-request" aria-label="Delete every downloaded song">Delete All</button>`}</div>`
+    : "";
+  return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}${bulkActions}</section>`;
 }
 
 /** @param {CompactDownloadedSong} song @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} label @param {PreviewSnapshot} preview @returns {string} */
