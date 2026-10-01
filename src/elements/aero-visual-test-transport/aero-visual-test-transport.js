@@ -157,6 +157,12 @@ export class AeroVisualTestTransport extends HTMLElement {
         <button class="volume-button" part="volume-button" type="button" data-role="volume-toggle" aria-label="Open volume controls" aria-controls="volume-popover" aria-expanded="false">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zm11.5.5a3.5 3.5 0 0 1 0 5l1.4 1.4a5.5 5.5 0 0 0 0-7.8l-1.4 1.4zm2.8-2.8a7.5 7.5 0 0 1 0 10.6l1.4 1.4a9.5 9.5 0 0 0 0-13.4l-1.4 1.4z"/></svg>
         </button>
+        <button class="volume-button" part="calibrate-button" type="button" data-role="calibrate" aria-label="Force calibrate now">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5V2h0v3h-2V2h0v3H8a3 3 0 0 0-3 3v2H2v0h3v2H2v0h3v2a3 3 0 0 0 3 3h2v3h0v-3h2v3h0v-3h2a3 3 0 0 0 3-3v-2h3v0h-3v-2h3v0h-3V8a3 3 0 0 0-3-3h-2V2h0v3h-2V2h0v3h-2z"/></svg>
+        </button>
+        <button class="volume-button" part="fullscreen-button" type="button" data-role="fullscreen" aria-label="Enter Fullscreen">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z"/></svg>
+        </button>
         <div id="volume-popover" class="volume-popover" part="volume-popover" role="dialog" aria-label="Volume controls" hidden>
           <label class="volume-control">
             <output data-role="music-volume-value" for="music-volume">0.5</output>
@@ -285,6 +291,11 @@ export class AeroVisualTestTransport extends HTMLElement {
       if (this.volumePopoverOpen) this.closeVolumePopover(true);
       else this.openVolumePopover();
     }
+    // 0.0.86 (Derrick): fullscreen and calibration moved out of the pause menu and
+    // live beside the volume control in the transport, so both are reachable
+    // without opening the drawer.
+    else if (target.dataset.role === "fullscreen") this.emitIntent("visual-test-fullscreen");
+    else if (target.dataset.role === "calibrate") this.emitIntent("visual-test-calibrate");
   }
 
   /** @param {Event} event @returns {void} */
