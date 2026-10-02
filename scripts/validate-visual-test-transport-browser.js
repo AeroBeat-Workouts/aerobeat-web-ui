@@ -292,7 +292,7 @@ try {
   assert(lifecycle?.openBeforeDetach && lifecycle.closedOnDetach && lifecycle.detachedGeometry?.every((value) => value === 0) && lifecycle.reconnectedClosedRendering && lifecycle.detachedCount === 0 && lifecycle.reconnectCount === 1, `Disconnect/reconnect retained rendered popover/listeners or duplicated intents: ${JSON.stringify(lifecycle)}`);
   assert(lifecycle.focusStable === true, "Snapshot update replaced or blurred the focused timeline.");
 
-  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+  for (const viewport of [{ width: 320, height: 700 }, { width: 360, height: 780 }, { width: 390, height: 844 }, { width: 1280, height: 800 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);
     const layout = await page.evaluate(() => {
       const host = document.querySelector("aero-visual-test-transport");
@@ -316,12 +316,20 @@ try {
       const toggleRect = toggle.getBoundingClientRect();
       const timeRect = time.getBoundingClientRect();
       const style = getComputedStyle(bar);
-      return { viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight), timeBeforeVolume: timeRect.right <= toggleRect.left, toggleSize: [toggleRect.width,toggleRect.height], popoverWithin: popoverRect.left >= 0 && popoverRect.right <= innerWidth && popoverRect.top >= 0 && popoverRect.bottom <= barRect.top, rangeSizes: ranges.map((entry) => { const rect=entry.getBoundingClientRect(); return [rect.width,rect.height]; }) };
+      const roles = ["play-pause", "timeline", "timecode", "volume-toggle", "calibrate", "fullscreen"];
+      const controls = roles.map((role) => host.shadowRoot?.querySelector(`[data-role='${role}']`));
+      if (controls.some((control) => !(control instanceof HTMLElement))) return null;
+      const rects = controls.map((control) => control.getBoundingClientRect());
+      const labels = controls.map((control) => control.getAttribute("aria-label"));
+      const timeline = controls[1];
+      return { viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight), timeBeforeVolume: timeRect.right <= toggleRect.left, toggleSize: [toggleRect.width,toggleRect.height], popoverWithin: popoverRect.left >= 0 && popoverRect.right <= innerWidth && popoverRect.top >= 0 && popoverRect.bottom <= barRect.top, rangeSizes: ranges.map((entry) => { const rect=entry.getBoundingClientRect(); return [rect.width,rect.height]; }), row: rects.every((rect) => rect.top >= rects[0].top - 1 && rect.bottom <= rects[0].bottom + 1 && rect.top < rects[0].bottom && rect.bottom > rects[0].top), nonoverlap: rects.every((rect, index) => index === 0 || rects[index - 1].right <= rect.left + 0.5), withinViewport: rects.every((rect) => rect.left >= 0 && rect.right <= innerWidth + 0.5), iconSizes: rects.slice(3).map((rect) => [rect.width, rect.height]), timelineWidth: rects[1].width, timelineEnabled: timeline instanceof HTMLInputElement && !timeline.disabled, labels };
     });
     assert(layout !== null && layout.bodyWidth <= layout.viewportWidth && layout.hostLeft >= 0 && layout.hostRight <= layout.viewportWidth + 0.5, `Transport overflowed ${viewport.width}x${viewport.height}.`);
     assert(Math.abs(layout.barBottom - layout.viewportHeight) <= 0.5, `Transport did not stay bottom-aligned at ${viewport.width}x${viewport.height}.`);
     assert(layout.paddingBottom >= 17 && layout.paddingLeft >= 13 && layout.paddingRight >= 11, `Safe-area padding failed at ${viewport.width}x${viewport.height}.`);
+    assert(layout.row && layout.nonoverlap && layout.withinViewport && layout.timelineEnabled && layout.timelineWidth >= 42 && layout.iconSizes.every(([width, height]) => width >= 42 && height >= 42) && layout.labels.every((label, index) => index === 2 || Boolean(label)), `Six controls did not share a usable, labeled, nonoverlapping viewport row at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
     assert(layout.timeBeforeVolume && layout.toggleSize.every((value) => value >= 44) && layout.popoverWithin && layout.rangeSizes.every(([width,height]) => width >= 44 && height >= 44), `Volume/timecode ordering, hit area, or popover bounds failed at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
+    console.log(`Transport ${viewport.width}x${viewport.height}: timeline ${layout.timelineWidth}px, icons ${layout.iconSizes.map(([width, height]) => `${width}x${height}`).join(", ")}, single row ${layout.row}, overflow ${layout.bodyWidth > layout.viewportWidth}`);
   }
   await context.close();
 

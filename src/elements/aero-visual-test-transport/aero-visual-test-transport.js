@@ -55,7 +55,7 @@ export class AeroVisualTestTransport extends HTMLElement {
           border-block-start: 1px solid var(--aero-test-transport-border, rgba(255, 255, 255, .34));
           display: grid;
           gap: 10px;
-          grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(5ch, auto) 44px;
+          grid-template-columns: 72px minmax(0, 1fr) minmax(5ch, auto) repeat(3, 44px);
           inline-size: 100%;
           min-block-size: calc(58px + max(var(--aero-test-safe-area-bottom, 0px), env(safe-area-inset-bottom)));
           padding-block: 8px max(8px, var(--aero-test-safe-area-bottom, 0px), env(safe-area-inset-bottom));
@@ -143,8 +143,11 @@ export class AeroVisualTestTransport extends HTMLElement {
         }
         .volume-label { white-space: nowrap; }
         @media (max-width: 430px) {
-          .transport { gap: 8px; grid-template-columns: minmax(68px, auto) minmax(0, 1fr) minmax(5ch, auto) 44px; }
-          button:not(.volume-button) { min-inline-size: 68px; padding-inline: 9px; }
+          .transport { gap: 8px; grid-template-columns: 44px minmax(0, 1fr) minmax(5ch, auto) repeat(3, 44px); }
+          button:not(.volume-button) { min-inline-size: 44px; padding-inline: 0; }
+        }
+        @media (max-width: 360px) {
+          .transport { gap: 6px; }
         }
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after { animation-duration: .001ms !important; scroll-behavior: auto !important; transition-duration: .001ms !important; }

@@ -283,8 +283,14 @@ export class AeroContentImportProgress extends AeroPresenterElement {
     const progress = clamp(readNumber(this.presenterSnapshot, "progress", 0), 0, 1);
     const jobId = readString(this.presenterSnapshot, "jobId", "");
     const error = readString(this.presenterSnapshot, "errorMessage", "");
-    const cancellable = !["complete", "cancelled", "failed"].includes(state);
-    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="import-heading"><h2 id="import-heading">Content import</h2><p class="live ${error ? "error" : ""}" role="status" aria-live="polite">${escapeHtml(error || `${titleCase(state)} · ${Math.round(progress * 100)}%`)}</p><progress part="progress" max="1" value="${progress}" aria-label="Import progress"></progress><button part="cancel-button" type="button" data-intent="content-import-cancel" data-value="${escapeAttribute(jobId)}" ${cancellable ? "" : "disabled"}>Cancel import</button></section>`);
+    const bulk = readRecord(this.presenterSnapshot, "bulkReimport") ?? {};
+    const bulkRunning = this.compact && readString(bulk, "state", "idle") === "running";
+    const completed = readStorageBytes(bulk, "completed");
+    const total = readStorageBytes(bulk, "total");
+    const bulkMessage = readString(bulk, "message", "").slice(0, 240);
+    const cancellable = bulkRunning || !["complete", "cancelled", "failed"].includes(state);
+    const status = bulkRunning ? `Reimport All: ${completed} of ${total} songs completed.${bulkMessage ? ` ${bulkMessage}` : ""}` : error || `${titleCase(state)} · ${Math.round(progress * 100)}%`;
+    this.renderMarkup(`<section class="panel" part="panel" aria-labelledby="import-heading"><h2 id="import-heading">Content import</h2><p class="live ${!bulkRunning && error ? "error" : ""}" role="status" aria-live="polite">${escapeHtml(status)}</p><progress part="progress" max="1" ${bulkRunning && total === 0 ? "" : `value="${bulkRunning ? (total > 0 ? Math.min(completed, total) / total : 0) : progress}"`} aria-label="${bulkRunning ? "Reimport All progress" : "Import progress"}"></progress><button part="cancel-button" type="button" data-intent="content-import-cancel" data-value="${escapeAttribute(bulkRunning ? "" : jobId)}" ${cancellable ? "" : "disabled"}>${bulkRunning ? "Cancel Reimport All" : "Cancel import"}</button></section>`);
   }
 
   /** @param {string} type @param {HTMLElement} target */
@@ -329,7 +335,7 @@ export class AeroContentLibrary extends AeroPresenterElement {
       const songs = compactDownloadedSongs(this.presenterSnapshot, packages);
       const selectedCollectionId = compactSelectedCollectionId(this.presenterSnapshot, songs, this.pendingSelectedCollectionId, this.pendingSelectedPackageId);
       if (this.pendingDeleteCollectionId && !songs.some((song) => song.collectionId === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
-      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot), this.pendingBulkDelete === true));
+      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot), this.pendingBulkDelete === true, readRecord(this.presenterSnapshot, "bulkReimport")));
       return;
     }
     if (this.pendingDeleteCollectionId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
@@ -396,6 +402,7 @@ export class AeroContentLibrary extends AeroPresenterElement {
       return;
     }
     if (type === "library-delete-all" || type === "library-reimport-all") {
+      if (type === "library-reimport-all" && readString(readRecord(this.presenterSnapshot, "bulkReimport") ?? {}, "state", "idle") === "running") return;
       this.pendingBulkDelete = false;
       this.emitIntent(type, {});
       this.render();
@@ -996,8 +1003,8 @@ function compactSelectedCollectionId(snapshot, songs, pendingCollectionId, pendi
   return songs.find((song) => song.difficulties.some((difficulty) => difficulty.packageId === selectedPackageId))?.collectionId ?? songs[0]?.collectionId ?? "";
 }
 
-/** @param {readonly CompactDownloadedSong[]} songs @param {string} selectedCollectionId @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} error @param {PreviewSnapshot} preview @returns {string} */
-function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview, pendingBulkDelete = false) {
+/** @param {readonly CompactDownloadedSong[]} songs @param {string} selectedCollectionId @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} error @param {PreviewSnapshot} preview @param {boolean} pendingBulkDelete @param {Readonly<Record<string, unknown>> | null} bulkReimport @returns {string} */
+function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview, pendingBulkDelete = false, bulkReimport = null) {
   const selectedIndex = songs.findIndex((song) => song.collectionId === selectedCollectionId);
   const checkedIndex = songs.length ? Math.max(0, selectedIndex) : -1;
   const totals = new Map();
@@ -1017,12 +1024,23 @@ function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pen
   // 0.0.87 (Derrick): "Reimport All" re-imports every downloaded song so a new map
   // schema is picked up; "Delete All" clears the library and confirms first, the
   // same two-step the per-song delete already uses.
+  const bulk = bulkReimport ?? {};
+  const bulkState = readString(bulk, "state", "idle");
+  const validBulkState = ["running", "complete", "failed", "cancelled"].includes(bulkState) ? bulkState : "idle";
+  const completed = readStorageBytes(bulk, "completed");
+  const total = readStorageBytes(bulk, "total");
+  const reimported = readStorageBytes(bulk, "reimported");
+  const skipped = readStorageBytes(bulk, "skipped");
+  const failed = readStorageBytes(bulk, "failed");
+  const detail = readString(bulk, "message", "").slice(0, 240);
+  const bulkSummary = validBulkState === "running" ? `Reimporting songs: ${completed} of ${total}.` : validBulkState === "cancelled" ? `Reimport All cancelled after ${completed} of ${total} songs; ${reimported} reimported, ${skipped} skipped, ${failed} failed.` : `Reimport complete: ${reimported} reimported, ${skipped} skipped, ${failed} failed.`;
+  const bulkStatus = validBulkState === "idle" ? "" : `<p part="bulk-reimport-status" class="live ${validBulkState === "failed" ? "error" : "compact-critical"}" role="${validBulkState === "failed" ? "alert" : "status"}" aria-live="${validBulkState === "failed" ? "assertive" : "polite"}">${escapeHtml(`${bulkSummary}${detail ? ` ${detail}` : ""}`)}</p>`;
   const bulkActions = songs.length > 0
-    ? `<div class="row compact-library-actions" part="bulk-actions" aria-label="All songs actions"><button type="button" class="compact-preview-action" part="reimport-all" data-intent="library-reimport-all" aria-label="Reimport every downloaded song">Reimport All</button>${pendingBulkDelete
+    ? `<div class="row compact-library-actions" part="bulk-actions" aria-label="All songs actions"><button type="button" class="compact-preview-action" part="reimport-all" data-intent="library-reimport-all" aria-label="Reimport every downloaded song" ${validBulkState === "running" ? "disabled" : ""}>Reimport All</button>${pendingBulkDelete
       ? `<button type="button" class="compact-preview-action" part="delete-all-confirm" data-intent="library-delete-all" aria-label="Confirm deleting every downloaded song">Confirm delete all</button><button type="button" class="compact-preview-action" part="delete-all-cancel" data-intent="library-delete-cancel" aria-label="Cancel deleting every downloaded song">Cancel</button>`
       : `<button type="button" class="compact-preview-action" part="delete-all" data-intent="library-delete-all-request" aria-label="Delete every downloaded song">Delete All</button>`}</div>`
     : "";
-  return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}${bulkActions}</section>`;
+  return `<section class="panel compact-library" part="panel" aria-labelledby="library-heading"><h2 id="library-heading">Downloaded songs</h2>${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ""}<div class="compact-library-choices" part="items" role="radiogroup" aria-label="Downloaded songs">${choices || `<p class="muted compact-critical">No downloaded songs.</p>`}</div>${actions}${bulkActions}${bulkStatus}</section>`;
 }
 
 /** @param {CompactDownloadedSong} song @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} label @param {PreviewSnapshot} preview @returns {string} */
