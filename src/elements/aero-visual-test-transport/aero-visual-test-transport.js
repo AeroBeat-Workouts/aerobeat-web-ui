@@ -14,8 +14,8 @@ export const aeroVisualTestTransportElementName = "aero-visual-test-transport";
 /** @typedef {import("./visual-test-transport-contract.js").AeroVisualTestTransportSnapshot} AeroVisualTestTransportSnapshot */
 
 /**
- * Compact Visual Test-only transport presenter. Media and timeline orchestration stay
- * with the host; this element consumes bounded scalar fields and emits intents.
+ * Compact bottom transport for Visual Test and active Play. Media, calibration and
+ * timeline orchestration stay with the host; this element emits bounded intents.
  */
 export class AeroVisualTestTransport extends HTMLElement {
   static get observedAttributes() { return ["hidden"]; }
@@ -161,7 +161,7 @@ export class AeroVisualTestTransport extends HTMLElement {
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zm11.5.5a3.5 3.5 0 0 1 0 5l1.4 1.4a5.5 5.5 0 0 0 0-7.8l-1.4 1.4zm2.8-2.8a7.5 7.5 0 0 1 0 10.6l1.4 1.4a9.5 9.5 0 0 0 0-13.4l-1.4 1.4z"/></svg>
         </button>
         <button class="volume-button" part="calibrate-button" type="button" data-role="calibrate" aria-label="Force calibrate now">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5V2h0v3h-2V2h0v3H8a3 3 0 0 0-3 3v2H2v0h3v2H2v0h3v2a3 3 0 0 0 3 3h2v3h0v-3h2v3h0v-3h2a3 3 0 0 0 3-3v-2h3v0h-3v-2h3v0h-3V8a3 3 0 0 0-3-3h-2V2h0v3h-2V2h0v3h-2z"/></svg>
+          <svg aria-hidden="true" viewBox="0 0 392 454"><path d="M194.71 1.72C201.95 1.51 208.84 3.3 215.61 5.58C222 7.74 227.59 11.06 232.49 15.69C233.52 16.66 234.85 17.11 235.85 18.11C245.54 27.77 251.28 41.65 252.26 55.26C254.43 85.23 229.14 112.54 199.66 114.27C191.82 114.72 182.4 113.7 175.3 110.24C160.23 102.92 149.11 93.67 143.06 77.38C129.72 41.41 157.01 2.84 194.71 1.72ZM24.12 124.88C34.02 123.3 45.22 124.7 55.26 124.7C76.18 124.7 97.1 124.7 118.02 124.7C182.46 124.7 246.89 124.7 311.33 124.7C324.42 124.7 337.51 124.7 350.61 124.7C358.09 124.7 366.07 123.83 373.26 126.01C385.55 129.74 393.26 144.13 389.8 156.55C387.25 165.69 379 173.65 369.47 175.19C364.56 175.98 359.04 175.31 354.07 175.31C333.28 175.31 312.48 175.31 291.69 175.31C283.22 175.31 274.75 175.31 266.28 175.31C263.08 175.31 258.51 175.97 257.4 179.74C256.04 184.33 257.29 193.46 257.29 198.5C257.29 212.37 257.29 226.23 257.29 240.09C257.29 285.66 257.29 331.22 257.29 376.79C257.29 390.01 257.29 403.23 257.29 416.45C257.29 428.09 256.88 440.46 246.02 447.6C231.95 456.86 211.08 449.97 206.9 432.93C205.35 426.59 206.69 408.94 206.69 401.43C206.69 379.1 206.69 356.77 206.69 334.43C206.69 325.06 206.69 315.69 206.69 306.32C206.69 303.25 205.46 298.42 201.58 298.33C196.4 298.2 195.86 303.26 195.86 307.09C195.86 316.85 195.86 326.6 195.86 336.36C195.86 358.05 195.86 379.74 195.86 401.43C195.86 408.72 197.17 425.43 195.78 431.63C192.57 445.93 176.94 455.04 162.98 451.05C140.71 444.69 144.72 416.8 144.72 399.12C144.72 393.99 144.72 388.86 144.72 383.72C144.72 338.41 144.72 293.1 144.72 247.79C144.72 232.65 144.72 217.5 144.72 202.35C144.72 195.12 145.3 187.61 144.7 180.4C144.43 177.2 141.4 175.49 138.43 175.32C130.91 174.89 123.25 175.31 115.71 175.31C94.92 175.31 74.13 175.31 53.33 175.31C43.75 175.31 31.85 176.7 22.53 175.19C5.96 172.5 -3.18 153.23 4.16 138.39C7.93 130.78 16.03 126.16 24.12 124.88Z" fill="currentColor" fill-rule="evenodd" stroke="currentColor" stroke-width="0.25" stroke-linejoin="round"/></svg>
         </button>
         <button class="volume-button" part="fullscreen-button" type="button" data-role="fullscreen" aria-label="Enter Fullscreen">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 0h2v5h-5v-2h3v-3z"/></svg>

@@ -1,7 +1,11 @@
 // @ts-check
 
 import { chromium } from "playwright";
+import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
+
+// Derrick's authorized tpose-icon-01.svg path, fixed here so validation needs no Downloads file.
+const calibratePathSha256 = "4f3fb310b2d79747829a2dd74720ad66abd1683a3b7bcee7e511d97c678b3fed";
 import { createUiValidationServer } from "./create-ui-validation-server.js";
 
 rmSync("node_modules/.vite", { recursive: true, force: true });
@@ -74,6 +78,20 @@ try {
   assert(initial.order === true, "Play/range/timecode/volume are not ordered left-to-right.");
   assert(initial.reduced === true && initial.snapshotFrozen === true, "Reduced-motion or immutable-state contract failed.");
 
+  const calibrateIcon = await page.evaluate(() => {
+    const button = document.querySelector("aero-visual-test-transport")?.shadowRoot?.querySelector("button[data-role='calibrate']");
+    const svg = button?.querySelector("svg");
+    const paths = svg?.querySelectorAll("path");
+    if (!(button instanceof HTMLButtonElement) || !(svg instanceof SVGSVGElement) || paths?.length !== 1) return null;
+    const path = paths[0];
+    const svgStyle = getComputedStyle(svg);
+    const pathStyle = getComputedStyle(path);
+    return { viewBox: svg.getAttribute("viewBox"), path: path.getAttribute("d"), ariaHidden: svg.getAttribute("aria-hidden"), name: button.getAttribute("aria-label"), role: button.dataset.role, disabled: button.disabled, fill: path.getAttribute("fill"), stroke: path.getAttribute("stroke"), fillRule: path.getAttribute("fill-rule"), strokeWidth: path.getAttribute("stroke-width"), strokeLinejoin: path.getAttribute("stroke-linejoin"), computedFill: pathStyle.fill, computedStroke: pathStyle.stroke, buttonColor: getComputedStyle(button).color, svgColor: svgStyle.color, svgFill: svgStyle.fill, svgSize: [svg.getBoundingClientRect().width, svg.getBoundingClientRect().height] };
+  });
+  assert(calibrateIcon !== null && calibrateIcon.viewBox === "0 0 392 454" && createHash("sha256").update(calibrateIcon.path ?? "").digest("hex") === calibratePathSha256, "Calibrate artwork differs from Derrick's supplied T-pose path/viewBox.");
+  assert(calibrateIcon.name === "Force calibrate now" && calibrateIcon.role === "calibrate" && !calibrateIcon.disabled && calibrateIcon.ariaHidden === "true", "Calibrate button accessible identity changed.");
+  assert(calibrateIcon.fill === "currentColor" && calibrateIcon.stroke === "currentColor" && calibrateIcon.fillRule === "evenodd" && calibrateIcon.strokeWidth === "0.25" && calibrateIcon.strokeLinejoin === "round" && calibrateIcon.computedFill === calibrateIcon.buttonColor && calibrateIcon.computedStroke === calibrateIcon.buttonColor && calibrateIcon.svgFill === calibrateIcon.svgColor && calibrateIcon.svgSize.every((value) => value >= 24), `Calibrate path did not inherit visible theme color at readable size: ${JSON.stringify(calibrateIcon)}`);
+
   await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
     if (!host) return;
@@ -92,6 +110,9 @@ try {
   assert(playPause[0]?.type === "visual-test-play" && Object.keys(playPause[0].payload).length === 0, "Play intent was not empty and exact.");
   assert(playPause[1]?.type === "visual-test-pause" && Object.keys(playPause[1].payload).length === 0, "Pause intent was not empty and exact.");
   assert(playPause.every((intent) => intent.detailFrozen && intent.payloadFrozen && intent.bubbles && intent.composed), "Transport intents are mutable or do not cross the bubbling/composed boundary.");
+  await page.locator("aero-visual-test-transport button[data-role='calibrate']").click();
+  const calibrateIntent = await page.evaluate(() => Reflect.get(window, "__aeroTransportIntents")?.at(-1));
+  assert(calibrateIntent?.type === "visual-test-calibrate" && JSON.stringify(calibrateIntent.payload) === "{}" && calibrateIntent.detailFrozen && calibrateIntent.payloadFrozen && calibrateIntent.bubbles && calibrateIntent.composed, "Calibrate click did not emit the exact composed, empty-payload intent.");
 
   const scrub = await page.evaluate(() => {
     const host = document.querySelector("aero-visual-test-transport");
@@ -322,12 +343,18 @@ try {
       const rects = controls.map((control) => control.getBoundingClientRect());
       const labels = controls.map((control) => control.getAttribute("aria-label"));
       const timeline = controls[1];
-      return { viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight), timeBeforeVolume: timeRect.right <= toggleRect.left, toggleSize: [toggleRect.width,toggleRect.height], popoverWithin: popoverRect.left >= 0 && popoverRect.right <= innerWidth && popoverRect.top >= 0 && popoverRect.bottom <= barRect.top, rangeSizes: ranges.map((entry) => { const rect=entry.getBoundingClientRect(); return [rect.width,rect.height]; }), row: rects.every((rect) => rect.top >= rects[0].top - 1 && rect.bottom <= rects[0].bottom + 1 && rect.top < rects[0].bottom && rect.bottom > rects[0].top), nonoverlap: rects.every((rect, index) => index === 0 || rects[index - 1].right <= rect.left + 0.5), withinViewport: rects.every((rect) => rect.left >= 0 && rect.right <= innerWidth + 0.5), iconSizes: rects.slice(3).map((rect) => [rect.width, rect.height]), timelineWidth: rects[1].width, timelineEnabled: timeline instanceof HTMLInputElement && !timeline.disabled, labels };
+      const calibrate = controls[4];
+      const calibrateSvg = calibrate.querySelector("svg");
+      const calibratePath = calibrateSvg?.querySelector("path");
+      const iconRect = calibrateSvg?.getBoundingClientRect();
+      const pathBounds = calibratePath instanceof SVGGraphicsElement ? calibratePath.getBBox() : null;
+      const iconVisible = !!iconRect && !!pathBounds && iconRect.width >= 24 && iconRect.height >= 24 && pathBounds.width >= 380 && pathBounds.height >= 440 && iconRect.left >= rects[4].left && iconRect.right <= rects[4].right && iconRect.top >= rects[4].top && iconRect.bottom <= rects[4].bottom && getComputedStyle(calibratePath).fill === getComputedStyle(calibrate).color && getComputedStyle(calibrate).visibility === "visible";
+      return { iconVisible, calibrateName: calibrate.getAttribute("aria-label"), viewportWidth: document.documentElement.clientWidth, bodyWidth: document.body.scrollWidth, hostLeft: hostRect.left, hostRight: hostRect.right, barBottom: barRect.bottom, viewportHeight: innerHeight, paddingBottom: parseFloat(style.paddingBottom), paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight), timeBeforeVolume: timeRect.right <= toggleRect.left, toggleSize: [toggleRect.width,toggleRect.height], popoverWithin: popoverRect.left >= 0 && popoverRect.right <= innerWidth && popoverRect.top >= 0 && popoverRect.bottom <= barRect.top, rangeSizes: ranges.map((entry) => { const rect=entry.getBoundingClientRect(); return [rect.width,rect.height]; }), row: rects.every((rect) => rect.top >= rects[0].top - 1 && rect.bottom <= rects[0].bottom + 1 && rect.top < rects[0].bottom && rect.bottom > rects[0].top), nonoverlap: rects.every((rect, index) => index === 0 || rects[index - 1].right <= rect.left + 0.5), withinViewport: rects.every((rect) => rect.left >= 0 && rect.right <= innerWidth + 0.5), iconSizes: rects.slice(3).map((rect) => [rect.width, rect.height]), timelineWidth: rects[1].width, timelineEnabled: timeline instanceof HTMLInputElement && !timeline.disabled, labels };
     });
     assert(layout !== null && layout.bodyWidth <= layout.viewportWidth && layout.hostLeft >= 0 && layout.hostRight <= layout.viewportWidth + 0.5, `Transport overflowed ${viewport.width}x${viewport.height}.`);
     assert(Math.abs(layout.barBottom - layout.viewportHeight) <= 0.5, `Transport did not stay bottom-aligned at ${viewport.width}x${viewport.height}.`);
     assert(layout.paddingBottom >= 17 && layout.paddingLeft >= 13 && layout.paddingRight >= 11, `Safe-area padding failed at ${viewport.width}x${viewport.height}.`);
-    assert(layout.row && layout.nonoverlap && layout.withinViewport && layout.timelineEnabled && layout.timelineWidth >= 42 && layout.iconSizes.every(([width, height]) => width >= 42 && height >= 42) && layout.labels.every((label, index) => index === 2 || Boolean(label)), `Six controls did not share a usable, labeled, nonoverlapping viewport row at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
+    assert(layout.row && layout.nonoverlap && layout.withinViewport && layout.timelineEnabled && layout.timelineWidth >= 42 && layout.iconSizes.every(([width, height]) => width >= 42 && height >= 42) && layout.labels.every((label, index) => index === 2 || Boolean(label)) && layout.iconVisible && layout.calibrateName === "Force calibrate now", `Six controls did not share a usable, labeled, nonoverlapping viewport row at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
     assert(layout.timeBeforeVolume && layout.toggleSize.every((value) => value >= 44) && layout.popoverWithin && layout.rangeSizes.every(([width,height]) => width >= 44 && height >= 44), `Volume/timecode ordering, hit area, or popover bounds failed at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
     console.log(`Transport ${viewport.width}x${viewport.height}: timeline ${layout.timelineWidth}px, icons ${layout.iconSizes.map(([width, height]) => `${width}x${height}`).join(", ")}, single row ${layout.row}, overflow ${layout.bodyWidth > layout.viewportWidth}`);
   }
