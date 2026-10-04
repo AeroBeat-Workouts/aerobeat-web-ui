@@ -61,6 +61,7 @@ export {
   AeroTrackingPause,
   aeroProductPresenterConstructors,
   aeroUiIntentEventName,
+  beatSaverDifficultyColors,
   defineAeroProductPresenters
 } from "./elements/aero-product-presenters.js";
 export { AeroSelect, aeroSelectChangeEventName, defineAeroSelect } from "./elements/aero-select/aero-select.js";

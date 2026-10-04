@@ -906,9 +906,11 @@ function statusText(state, count) { if (state === "loading") return "Loading Bea
 function mapResultMarkup(result, checked) { const id = readString(result, "mapId", ""); const name = readString(result, "name", "Untitled map"); const author = readString(result, "songAuthorName", "Unknown artist"); return `<article><label class="card choice-radio" part="result"><input type="radio" name="beatsaver-map-choice" value="${escapeAttribute(id)}" data-intent="beatsaver-select-map" data-value="${escapeAttribute(id)}" ${checked ? "checked" : ""}><span class="choice-copy"><strong>${escapeHtml(name)}</strong><span class="muted">${escapeHtml(author)} · ${escapeHtml(id)}</span></span></label></article>`; }
 /** @param {string} value @param {string} label @param {string} selected @returns {string} */
 function optionMarkup(value, label, selected) { return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`; }
+/** Canonical BeatSaver difficulty color map shared by remote and downloaded lists. */
+export const beatSaverDifficultyColors = Object.freeze({ Easy: "#2ecc40", Normal: "#ff851b", Hard: "#ff4136", Expert: "#a30000", ExpertPlus: "#000000" });
 /** Visual-only difficulty marker shared by remote and downloaded lists. @param {string} difficulty @returns {string} */
 export function difficultyTagMarkup(difficulty) {
-  const colors = /** @type {Readonly<Record<string, string>>} */ ({ Easy: "#2ecc40", Normal: "#ff851b", Hard: "#ff4136", Expert: "#a30000", ExpertPlus: "#000000" });
+  const colors = beatSaverDifficultyColors;
   return `<span class="difficulty-tag" style="background:${colors[difficulty] ?? "#808080"}" aria-hidden="true"></span>`;
 }
 /** @typedef {Readonly<{state:"idle"|"loading"|"playing"|"ended"|"error",mapId:string,versionHash:string,packageId:string,errorMessage:string}>} PreviewSnapshot */
