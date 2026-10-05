@@ -335,7 +335,7 @@ export class AeroContentLibrary extends AeroPresenterElement {
       const songs = compactDownloadedSongs(this.presenterSnapshot, packages);
       const selectedCollectionId = compactSelectedCollectionId(this.presenterSnapshot, songs, this.pendingSelectedCollectionId, this.pendingSelectedPackageId);
       if (this.pendingDeleteCollectionId && !songs.some((song) => song.collectionId === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
-      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot), this.pendingBulkDelete === true, readRecord(this.presenterSnapshot, "bulkReimport")));
+      this.renderMarkup(compactLibraryMarkup(songs, selectedCollectionId, this.pendingSelectedPackageId, this.pendingDeleteCollectionId, error, previewSnapshot(this.presenterSnapshot), this.pendingBulkDelete === true, readRecord(this.presenterSnapshot, "bulkReimport"), true));
       return;
     }
     if (this.pendingDeleteCollectionId && !packages.some((item) => readString(item, "packageId", "") === this.pendingDeleteCollectionId)) this.pendingDeleteCollectionId = "";
@@ -1006,7 +1006,7 @@ function compactSelectedCollectionId(snapshot, songs, pendingCollectionId, pendi
 }
 
 /** @param {readonly CompactDownloadedSong[]} songs @param {string} selectedCollectionId @param {string} pendingPackageId @param {string} pendingDeleteCollectionId @param {string} error @param {PreviewSnapshot} preview @param {boolean} pendingBulkDelete @param {Readonly<Record<string, unknown>> | null} bulkReimport @returns {string} */
-function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview, pendingBulkDelete = false, bulkReimport = null) {
+function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pendingDeleteCollectionId, error, preview, pendingBulkDelete = false, bulkReimport = null, compact = false) {
   const selectedIndex = songs.findIndex((song) => song.collectionId === selectedCollectionId);
   const checkedIndex = songs.length ? Math.max(0, selectedIndex) : -1;
   const totals = new Map();
@@ -1036,7 +1036,15 @@ function compactLibraryMarkup(songs, selectedCollectionId, pendingPackageId, pen
   const failed = readStorageBytes(bulk, "failed");
   const detail = readString(bulk, "message", "").slice(0, 240);
   const bulkSummary = validBulkState === "running" ? `Reimporting songs: ${completed} of ${total}.` : validBulkState === "cancelled" ? `Reimport All cancelled after ${completed} of ${total} songs; ${reimported} reimported, ${skipped} skipped, ${failed} failed.` : `Reimport complete: ${reimported} reimported, ${skipped} skipped, ${failed} failed.`;
-  const bulkStatus = validBulkState === "idle" ? "" : `<p part="bulk-reimport-status" class="live ${validBulkState === "failed" ? "error" : "compact-critical"}" role="${validBulkState === "failed" ? "alert" : "status"}" aria-live="${validBulkState === "failed" ? "assertive" : "polite"}">${escapeHtml(`${bulkSummary}${detail ? ` ${detail}` : ""}`)}</p>`;
+  // Single source of truth: the host `detail` ("Reimport All finished: …") carries the
+  // same counts the presenter would re-derive, so for the terminal complete/failed state
+  // prefer it when present and fall back to `bulkSummary` only when the host has no
+  // message. Never concatenate both — that produced the duplicated double sentence.
+  const statusText = (validBulkState === "complete" || validBulkState === "failed") ? (detail || bulkSummary) : bulkSummary;
+  // The compact layout is the in-game pause menu; a library/import status does not
+  // belong there. Gate the `bulkStatus` line out of the pause menu, but keep the
+  // button-disabled state so "Reimport All" is disabled while a run is in progress.
+  const bulkStatus = (compact || validBulkState === "idle") ? "" : `<p part="bulk-reimport-status" class="live ${validBulkState === "failed" ? "error" : "compact-critical"}" role="${validBulkState === "failed" ? "alert" : "status"}" aria-live="${validBulkState === "failed" ? "assertive" : "polite"}">${escapeHtml(statusText)}</p>`;
   const bulkActions = songs.length > 0
     ? `<div class="row compact-library-actions" part="bulk-actions" aria-label="All songs actions"><button type="button" class="compact-preview-action" part="reimport-all" data-intent="library-reimport-all" aria-label="Reimport every downloaded song" ${validBulkState === "running" ? "disabled" : ""}>Reimport All</button>${pendingBulkDelete
       ? `<button type="button" class="compact-preview-action" part="delete-all-confirm" data-intent="library-delete-all" aria-label="Confirm deleting every downloaded song">Confirm delete all</button><button type="button" class="compact-preview-action" part="delete-all-cancel" data-intent="library-delete-cancel" aria-label="Cancel deleting every downloaded song">Cancel</button>`
