@@ -452,13 +452,16 @@ export class AeroGridPlayfield extends AeroPresenterElement {
   }
 }
 
-/** Flow HUD presenter. The sole visible Flow label is exactly "Flow". */
+/** Gameplay score/combo HUD presenter. Two-column layout: left center shows the
+ *  COMBO label, the combo count, a separator, and the score; right center shows
+ *  the combo multiplier (x1/x2/x4/x8) centered in a filled circle. Mode-agnostic;
+ *  it is the shared in-game HUD for both Flow and Boxing. */
 export class AeroFlowHud extends AeroPresenterElement {
   render() {
     const score = readNumber(this.presenterSnapshot, "score", 0);
     const combo = readNumber(this.presenterSnapshot, "combo", 0);
-    const direction = readString(this.presenterSnapshot, "direction", "—");
-    this.renderMarkup(`<section class="panel row" part="hud" aria-label="Flow status"><strong>Flow</strong><span part="score">Score ${score}</span><span part="combo">Combo ${combo}</span><span part="direction">Direction ${escapeHtml(direction)}</span></section>`);
+    const multiplier = comboMultiplier(combo);
+    this.renderMarkup(`<section class="panel hud" part="hud" aria-label="Score and combo"><div class="hud-left"><span class="hud-combo-label">COMBO</span><span part="combo" class="hud-combo-count">${combo}</span><span class="hud-separator" aria-hidden="true">-----</span><span part="score" class="hud-score">${score}</span></div><div class="hud-right"><span part="multiplier" class="hud-multiplier" aria-label="Multiplier ${escapeHtml(multiplier)}">${escapeHtml(multiplier)}</span></div></section><style>.hud{align-items:center;display:flex;flex-wrap:wrap;gap:16px}.hud-left{align-items:center;display:grid;flex:1 1 auto;gap:4px;min-inline-size:0}.hud-combo-label{color:var(--aero-role-muted,var(--aero-color-muted,#486c7d));font-size:.72rem;font-weight:800;letter-spacing:.12em}.hud-combo-count{font-size:1.7rem;font-weight:800;line-height:1}.hud-separator{color:var(--aero-role-muted,var(--aero-color-muted,#486c7d));font-size:.8rem;letter-spacing:1px}.hud-score{font-size:1.2rem;font-weight:750;line-height:1}.hud-right{align-items:center;display:flex;flex:0 0 auto;justify-content:center}.hud-multiplier{align-items:center;background:var(--aero-role-accent,#0a84ff);block-size:3.5rem;border-radius:50%;color:#fff;display:grid;font-size:1.05rem;font-weight:800;inline-size:3.5rem;justify-items:center}</style>`);
   }
 }
 
@@ -1089,6 +1092,9 @@ function libraryItemMarkup(item, pendingDeletePackageId, checked) {
 function formatStorage(used, quota) { if (quota <= 0) return `${formatBytes(used)} stored · quota unavailable`; if (used > quota) return `${formatBytes(used)} of ${formatBytes(quota)} used · over quota`; return `${formatBytes(used)} of ${formatBytes(quota)} used (${Math.round((used / quota) * 100)}%)`; }
 /** @param {number} bytes @returns {string} */
 function formatBytes(bytes) { if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`; }
+/** Derive the combo multiplier from the combo count: x1 (0-1), x2 (2-3), x4 (4-7), x8 (8+). @param {number} combo @returns {"x1"|"x2"|"x4"|"x8"} */
+function comboMultiplier(combo) { return combo >= 8 ? "x8" : combo >= 4 ? "x4" : combo >= 2 ? "x2" : "x1"; }
+
 /** @param {string} state @returns {string} */
 function calibrationMessage(state) { const messages = /** @type {Readonly<Record<string, string>>} */ ({ waiting: "Step back until your upper body is visible.", holding: "Hold a steady T-pose for four seconds.", cooldown: "Calibration captured. Relax your arms.", calibrated: "Calibration ready.", tracking_lost: "Tracking lost. A fresh calibration is required.", error: "Calibration could not complete." }); return messages[state] ?? "Calibration required."; }
 /** @typedef {Readonly<{schema:"aerobeat/prototype_tuning_identity",version:1,profileId:string,profileVersion:string,contentHash:string,class:string,regenerationRequired:boolean}>} ProfileIdentity */

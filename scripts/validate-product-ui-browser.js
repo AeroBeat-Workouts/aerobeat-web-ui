@@ -52,7 +52,7 @@ try {
   assert(result.renderSurface === true && result.cellCount === 12, "Grid host did not expose its public surface and 4x3 receptors.");
   assert(result.pauseRole === "alertdialog", "Tracking pause was not exposed as an accessible modal alert.");
   assert(result.countdownText.includes("Workout time frozen"), "Countdown did not announce frozen workout time.");
-  assert(result.hudText.includes("Flow") && !result.hudText.includes("Flow Grid") && !result.hudText.includes("Flow Colliders") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Flow/Track/Spatial HUD states were incomplete or ambiguous.");
+  assert(result.hudText.includes("COMBO") && result.hudText.includes("-----") && result.hudText.includes("100") && result.hudText.includes("3") && result.hudText.includes("x2") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Score/combo HUD (COMBO label, separator, score, multiplier) or Track/Spatial HUD states were incomplete.");
   assert(result.sessionMissingState.disabled === true && result.sessionMissingState.prerequisite === "Download Music first." && result.disabledSessionIntentCount === 0, "Missing downloaded Music did not truthfully gate Start/Test with a minimal prerequisite.");
   assert(result.sessionPendingState.disabled === false && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test truth must remain exposed without disabling intentional restart actions.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");

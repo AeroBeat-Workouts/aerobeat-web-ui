@@ -104,6 +104,8 @@ export class AeroVisualTestTransport extends HTMLElement {
           padding: 8px;
         }
         .volume-button svg { block-size: 24px; fill: currentColor; inline-size: 24px; pointer-events: none; }
+        button[data-role='play-pause'] { align-items: center; display: inline-flex; justify-content: center; }
+        button[data-role='play-pause'] svg { block-size: 24px; fill: currentColor; inline-size: 24px; pointer-events: none; }
         .volume-popover {
           background: rgba(3, 19, 31, .98);
           border: 1px solid rgba(255, 255, 255, .46);
@@ -154,7 +156,10 @@ export class AeroVisualTestTransport extends HTMLElement {
         }
       </style>
       <div class="transport" part="transport" role="group" aria-label="Visual Test playback">
-        <button part="play-pause-button" type="button" data-role="play-pause">Play</button>
+        <button part="play-pause-button" type="button" data-role="play-pause" aria-label="Play Visual Test">
+          <svg part="play-icon" data-role="play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg part="pause-icon" data-role="pause-icon" aria-hidden="true" viewBox="0 0 24 24" hidden><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
+        </button>
         <input part="timeline" data-role="timeline" type="range" min="0" max="0" step="1" value="0" aria-label="Visual Test position" aria-valuetext="00:00">
         <time part="timecode" data-role="timecode" datetime="PT0S">00:00</time>
         <button class="volume-button" part="volume-button" type="button" data-role="volume-toggle" aria-label="Open volume controls" aria-controls="volume-popover" aria-expanded="false">
@@ -222,9 +227,12 @@ export class AeroVisualTestTransport extends HTMLElement {
     this.setAttribute("aria-hidden", String(!snapshot.active));
     const button = this.shadowRoot?.querySelector("button[data-role='play-pause']");
     if (button instanceof HTMLButtonElement) {
-      button.textContent = snapshot.playing ? "Pause" : "Play";
       button.setAttribute("aria-label", snapshot.playing ? "Pause Visual Test" : "Play Visual Test");
       button.setAttribute("aria-pressed", String(snapshot.playing));
+      const playIcon = this.shadowRoot?.querySelector("svg[data-role='play-icon']");
+      const pauseIcon = this.shadowRoot?.querySelector("svg[data-role='pause-icon']");
+      if (playIcon instanceof SVGElement) playIcon.hidden = snapshot.playing;
+      if (pauseIcon instanceof SVGElement) pauseIcon.hidden = !snapshot.playing;
     }
     const range = this.shadowRoot?.querySelector("input[data-role='timeline']");
     if (range instanceof HTMLInputElement) {

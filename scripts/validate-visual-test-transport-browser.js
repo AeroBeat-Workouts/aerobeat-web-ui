@@ -69,7 +69,7 @@ try {
     };
   });
   assert(initial !== null && initial.hidden === false, "Active Visual Test transport was hidden.");
-  assert(initial.buttonText === "Play" && initial.buttonName === "Play Visual Test", "Paused transport did not expose Play.");
+  assert(initial.buttonName === "Play Visual Test", "Paused transport did not expose Play.");
   assert(initial.rangeValue === "65000" && initial.rangeMax === "180000" && initial.rangeText === "01:05" && initial.timecode === "01:05", "Initial range/timecode truth was incorrect.");
   assert(initial.volumeButtonName === "Open volume controls" && initial.volumeExpanded === "false" && initial.popoverHidden && JSON.stringify(initial.volumeValues) === JSON.stringify(["0.5", "0.5"]), "Initial volume defaults/open state were incorrect.");
   assert(initial.popoverDisplay === "none" && initial.popoverGeometry.every((value) => value === 0), `Closed volume popover rendered by default: ${JSON.stringify({ display: initial.popoverDisplay, geometry: initial.popoverGeometry })}`);
