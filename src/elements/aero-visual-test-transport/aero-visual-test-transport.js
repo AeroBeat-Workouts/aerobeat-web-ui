@@ -106,6 +106,7 @@ export class AeroVisualTestTransport extends HTMLElement {
         .volume-button svg { block-size: 24px; fill: currentColor; inline-size: 24px; pointer-events: none; }
         button[data-role='play-pause'] { align-items: center; display: inline-flex; justify-content: center; }
         button[data-role='play-pause'] svg { block-size: 24px; fill: currentColor; inline-size: 24px; pointer-events: none; }
+        button[data-role='play-pause'] svg[hidden] { display: none; }
         .volume-popover {
           background: rgba(3, 19, 31, .98);
           border: 1px solid rgba(255, 255, 255, .46);
