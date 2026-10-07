@@ -43,11 +43,14 @@ export class AeroVisualTestTransport extends HTMLElement {
           inset-block-end: 0;
           inset-inline: 0;
           min-inline-size: 0;
+          opacity: var(--aero-bottom-ui-opacity, 1);
           pointer-events: none;
           position: absolute;
+          transition: opacity .3s ease;
           z-index: 30;
         }
         :host([hidden]) { display: none; }
+        :host(.bottom-ui-visible, :hover) { opacity: 1; }
         *, *::before, *::after { box-sizing: border-box; }
         .transport {
           align-items: center;
