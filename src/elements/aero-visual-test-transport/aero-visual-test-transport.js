@@ -29,6 +29,7 @@ export class AeroVisualTestTransport extends HTMLElement {
     this.boundClick = (event) => this.handleClick(event);
     this.boundInput = (event) => this.handleInput(event);
     this.boundPointerDown = (event) => this.handlePointerDown(event);
+    this.boundFocusChange = () => this.syncVisibleFocus();
     this.boundDocumentPointerDown = (event) => this.handleOutsideInteraction(event);
     this.boundDocumentClick = (event) => this.handleOutsideInteraction(event);
     this.boundDocumentKeydown = (event) => this.handleDocumentKeydown(event);
@@ -50,7 +51,10 @@ export class AeroVisualTestTransport extends HTMLElement {
           z-index: 30;
         }
         :host([hidden]) { display: none; }
-        :host(.bottom-ui-visible, :hover) { opacity: 1; }
+        :host(.bottom-ui-visible), :host(.volume-popover-open), :host(.keyboard-focus-visible) { opacity: 1; }
+        @media (hover: hover) and (pointer: fine) {
+          :host(:hover) { opacity: 1; }
+        }
         *, *::before, *::after { box-sizing: border-box; }
         .transport {
           align-items: center;
@@ -200,6 +204,9 @@ export class AeroVisualTestTransport extends HTMLElement {
     this.shadowRoot?.addEventListener("click", this.boundClick);
     this.shadowRoot?.addEventListener("input", this.boundInput);
     this.shadowRoot?.addEventListener("pointerdown", this.boundPointerDown);
+    this.shadowRoot?.addEventListener("focusin", this.boundFocusChange);
+    this.shadowRoot?.addEventListener("focusout", this.boundFocusChange);
+    this.shadowRoot?.addEventListener("keydown", this.boundFocusChange);
     document.addEventListener("pointerdown", this.boundDocumentPointerDown);
     document.addEventListener("click", this.boundDocumentClick);
     document.addEventListener("keydown", this.boundDocumentKeydown);
@@ -210,6 +217,10 @@ export class AeroVisualTestTransport extends HTMLElement {
     this.shadowRoot?.removeEventListener("click", this.boundClick);
     this.shadowRoot?.removeEventListener("input", this.boundInput);
     this.shadowRoot?.removeEventListener("pointerdown", this.boundPointerDown);
+    this.shadowRoot?.removeEventListener("focusin", this.boundFocusChange);
+    this.shadowRoot?.removeEventListener("focusout", this.boundFocusChange);
+    this.shadowRoot?.removeEventListener("keydown", this.boundFocusChange);
+    this.classList.remove("keyboard-focus-visible");
     document.removeEventListener("pointerdown", this.boundDocumentPointerDown);
     document.removeEventListener("click", this.boundDocumentClick);
     document.removeEventListener("keydown", this.boundDocumentKeydown);
@@ -293,6 +304,7 @@ export class AeroVisualTestTransport extends HTMLElement {
   openVolumePopover() {
     if (!this.transportSnapshot.active || this.volumePopoverOpen) return;
     this.volumePopoverOpen = true;
+    this.classList.add("volume-popover-open");
     this.renderVolumePopoverState();
     const music = this.shadowRoot?.querySelector("input[data-role='music-volume']");
     if (music instanceof HTMLInputElement) music.focus();
@@ -302,6 +314,7 @@ export class AeroVisualTestTransport extends HTMLElement {
   closeVolumePopover(restoreFocus) {
     if (!this.volumePopoverOpen) return;
     this.volumePopoverOpen = false;
+    this.classList.remove("volume-popover-open");
     this.renderVolumePopoverState();
     const button = this.shadowRoot?.querySelector("button[data-role='volume-toggle']");
     if (restoreFocus && this.isConnected && !this.hidden && button instanceof HTMLButtonElement) button.focus();
@@ -327,6 +340,14 @@ export class AeroVisualTestTransport extends HTMLElement {
   handlePointerDown(event) {
     const target = event.composedPath()[0];
     if (target instanceof HTMLInputElement && target.dataset.role === "timeline") this.requestPauseForScrub();
+    this.classList.remove("keyboard-focus-visible");
+  }
+
+  /** @returns {void} */
+  syncVisibleFocus() {
+    queueMicrotask(() => {
+      if (this.isConnected) this.classList.toggle("keyboard-focus-visible", Boolean(this.shadowRoot?.querySelector(":focus-visible")));
+    });
   }
 
   /** @param {Event} event @returns {void} */

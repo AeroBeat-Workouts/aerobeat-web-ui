@@ -360,6 +360,77 @@ try {
   }
   await context.close();
 
+  // Verify the actual host opacity cascade under sticky touch hover and fine-pointer hover.
+  // The assembly sets this CSS variable; this scene tests the presenter's response to it.
+  for (const device of [
+    { name: "touch portrait", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true },
+    { name: "touch landscape", viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true },
+    { name: "desktop", viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false }
+  ]) {
+    const opacityContext = await browser.newContext({ ...device, reducedMotion: "reduce" });
+    const opacityPage = await opacityContext.newPage();
+    opacityPage.on("console", (message) => { if (message.type() === "warning" || message.type() === "error") consoleNoise.push(`${message.type()}: ${message.text()}`); });
+    opacityPage.on("pageerror", (error) => pageErrors.push(error.message));
+    await opacityPage.goto(`${url}.testbed/scenes/aero-visual-test-transport.scene.html`, { waitUntil: "networkidle" });
+    await opacityPage.waitForFunction(() => Boolean(customElements.get("aero-visual-test-transport")));
+    await opacityPage.evaluate(() => document.querySelector("aero-visual-test-transport")?.style.setProperty("--aero-bottom-ui-opacity", "0.3"));
+    const host = opacityPage.locator("aero-visual-test-transport");
+    const range = host.locator("input[data-role='timeline']");
+    await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 0.3);
+    const idle = await opacityPage.evaluate(() => {
+      const element = document.querySelector("aero-visual-test-transport");
+      const bar = element?.shadowRoot?.querySelector(".transport");
+      return element instanceof HTMLElement && bar instanceof HTMLElement ? {
+        opacity: Number(getComputedStyle(element).opacity),
+        hostPointerEvents: getComputedStyle(element).pointerEvents,
+        barPointerEvents: getComputedStyle(bar).pointerEvents,
+        hover: matchMedia("(hover: hover) and (pointer: fine)").matches
+      } : null;
+    });
+    assert(idle?.opacity === 0.3 && idle.hostPointerEvents === "none" && idle.barPointerEvents === "auto" && idle.hover === !device.hasTouch, `${device.name} idle opacity or transport pointer target changed: ${JSON.stringify(idle)}`);
+    if (device.hasTouch) {
+      await opacityPage.tap("aero-visual-test-transport button[data-role='calibrate']");
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 0.3);
+      const touched = await host.evaluate((element) => ({ opacity: Number(getComputedStyle(element).opacity), hovered: element.matches(":hover"), focused: element.matches(":focus-within") }));
+      assert(touched.opacity === 0.3, `${device.name} idle transport stayed opaque after touch release: ${JSON.stringify(touched)}`);
+      await opacityPage.tap("aero-visual-test-transport [data-role='timeline']");
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 0.3);
+      const timelineRelease = await host.evaluate((element) => ({ focused: element.matches(":focus-within"), visibleFocus: Boolean(element.shadowRoot?.querySelector(":focus-visible")), opacity: Number(getComputedStyle(element).opacity) }));
+      assert(timelineRelease.focused && !timelineRelease.visibleFocus && timelineRelease.opacity === 0.3, `${device.name} timeline remained opaque after touch release: ${JSON.stringify(timelineRelease)}`);
+      await opacityPage.tap("aero-visual-test-transport [data-role='volume-toggle']");
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 1);
+      const volumeOpen = await host.evaluate((element) => ({ focused: element.matches(":focus-within"), visibleFocus: Boolean(element.shadowRoot?.querySelector(":focus-visible")), popoverOpen: element.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden") === false }));
+      assert(volumeOpen.popoverOpen && volumeOpen.focused && !volumeOpen.visibleFocus, `${device.name} touch volume popover did not stay fully opaque: ${JSON.stringify(volumeOpen)}`);
+      await opacityPage.tap("aero-visual-test-transport [data-role='volume-toggle']");
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 0.3);
+      const volumeRelease = await host.evaluate((element) => ({ focused: element.matches(":focus-within"), visibleFocus: Boolean(element.shadowRoot?.querySelector(":focus-visible")), popoverOpen: element.shadowRoot?.querySelector(".volume-popover")?.hasAttribute("hidden") === false }));
+      assert(!volumeRelease.popoverOpen && volumeRelease.focused && !volumeRelease.visibleFocus, `${device.name} volume button remained opaque after touch close: ${JSON.stringify(volumeRelease)}`);
+    } else {
+      await host.locator("button[data-role='calibrate']").hover();
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 1);
+      assert(await host.evaluate((element) => element.matches(":hover")), "Desktop fine-pointer hover did not make transport opaque.");
+      await opacityPage.mouse.move(0, 0);
+      await opacityPage.waitForFunction(() => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === 0.3);
+    }
+    const waitForOpacity = (opacity) => opacityPage.waitForFunction((value) => Number(getComputedStyle(document.querySelector("aero-visual-test-transport")).opacity) === value, opacity);
+    // Tab must establish visible keyboard focus, even after touch left DOM focus behind.
+    await opacityPage.keyboard.press("Tab");
+    await waitForOpacity(1);
+    const keyboardFocus = await host.evaluate((element) => ({ focused: element.matches(":focus-within"), visibleFocus: Boolean(element.shadowRoot?.querySelector(":focus-visible")) }));
+    assert(keyboardFocus.focused && keyboardFocus.visibleFocus, `${device.name} keyboard Tab did not make transport opaque: ${JSON.stringify(keyboardFocus)}`);
+    await opacityPage.evaluate(() => {
+      const element = document.querySelector("aero-visual-test-transport");
+      if (element?.shadowRoot?.activeElement instanceof HTMLElement) element.shadowRoot.activeElement.blur();
+    });
+    await waitForOpacity(0.3);
+    await host.evaluate((element) => element.classList.add("bottom-ui-visible"));
+    await waitForOpacity(1);
+    await host.evaluate((element) => element.classList.remove("bottom-ui-visible"));
+    await waitForOpacity(0.3);
+    console.log(`${device.name} transport opacity states passed.`);
+    await opacityContext.close();
+  }
+
   const dprOneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
   const dprOnePage = await dprOneContext.newPage();
   dprOnePage.on("console", (message) => { if (message.type() === "warning" || message.type() === "error") consoleNoise.push(`${message.type()}: ${message.text()}`); });
