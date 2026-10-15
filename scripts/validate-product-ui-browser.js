@@ -57,17 +57,19 @@ try {
   assert(result.sessionPendingState.disabled === false && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test truth must remain exposed without disabling intentional restart actions.");
   const modelDownloadEvidence = await page.evaluate(() => {
     const host = document.createElement("aero-session-actions");
-    document.body.append(host);
+    document.body.prepend(host);
     const base = { downloadedPlayable: true, activeAction: "start", pendingAction: "start", pendingStatus: "Preparing tracker…" };
     const inspect = () => {
       const root = host.shadowRoot;
       const bar = root?.querySelector("progress[part='model-download-progress']");
       const status = root?.querySelector("[part='pending-status']");
+      const queue = root?.querySelector("[part='queued-status']");
       const actions = root?.querySelector("[part='actions']");
       const button = root?.querySelector("[part='start-button']");
       const barRect = bar?.getBoundingClientRect();
       const actionsRect = actions?.getBoundingClientRect();
-      return { text: status?.textContent?.trim() ?? "", role: status?.getAttribute("role"), live: status?.getAttribute("aria-live"), bar: Boolean(bar), value: bar?.getAttribute("value"), max: bar?.getAttribute("max"), label: bar?.getAttribute("aria-label"), width: barRect?.width ?? 0, actionsWidth: actionsRect?.width ?? 0, enabled: button?.disabled === false, buttonHeight: button?.getBoundingClientRect().height ?? 0 };
+      const queueRect = queue?.getBoundingClientRect();
+      return { text: status?.textContent?.trim() ?? "", role: status?.getAttribute("role"), live: status?.getAttribute("aria-live"), queueText: queue?.textContent?.trim() ?? "", queueHtml: queue?.innerHTML ?? "", queueRole: queue?.getAttribute("role"), queueLive: queue?.getAttribute("aria-live"), queueVisible: Boolean(queue && queueRect && queueRect.width >= 80 && queueRect.height > 0 && queueRect.left >= 0 && queueRect.right <= innerWidth && queueRect.bottom <= innerHeight && getComputedStyle(queue).visibility === "visible"), bar: Boolean(bar), value: bar?.getAttribute("value"), max: bar?.getAttribute("max"), label: bar?.getAttribute("aria-label"), width: barRect?.width ?? 0, actionsWidth: actionsRect?.width ?? 0, enabled: button?.disabled === false, buttonHeight: button?.getBoundingClientRect().height ?? 0 };
     };
     host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 0, totalBytes: 5777746 } });
     const zero = inspect();
@@ -91,10 +93,13 @@ try {
       { ...base, pendingAction: "", pendingStatus: "Ready for T-pose." },
       { ...base, pendingAction: "", pendingStatus: "Private GPU session." }
     ].map((snapshot) => { host.setSnapshot({ ...snapshot, modelDownloadProgress: { receivedBytes: 200, totalBytes: 5777746 } }); return inspect(); });
-    host.setSnapshot({ ...base, activeAction: "start", pendingAction: "test", pendingStatus: "Test queued until tracker is ready.", modelDownloadProgress: { receivedBytes: 1000, totalBytes: 5777746 } });
-    const queuedTest = { ...inspect(), testBusy: host.shadowRoot?.querySelector("[part='test-button']")?.getAttribute("aria-busy") };
+    host.compact = true;
+    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued after Play initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: 5777746 } });
+    const queuedTest = { ...inspect(), testBusy: host.shadowRoot?.querySelector("[part='test-button']")?.getAttribute("aria-busy"), testHeight: host.shadowRoot?.querySelector("[part='test-button']")?.getBoundingClientRect().height ?? 0 };
+    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued <after> Play & initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: 5777746 } });
+    const escapedQueue = inspect();
     host.remove();
-    return { zero, half, complete, absent, invalid, inactive, queuedTest };
+    return { zero, half, complete, absent, invalid, inactive, queuedTest, escapedQueue };
   });
   assert(modelDownloadEvidence.zero.text === "Loading pose model: 0%" && modelDownloadEvidence.zero.value === "0" && modelDownloadEvidence.zero.max === "5777746" && modelDownloadEvidence.zero.label === modelDownloadEvidence.zero.text && modelDownloadEvidence.zero.role === "status" && modelDownloadEvidence.zero.live === "polite", "Exact zero-byte model download must be labeled and accessible.");
   assert(modelDownloadEvidence.half.text === "Loading pose model: 50%" && modelDownloadEvidence.half.value === "2888873" && modelDownloadEvidence.half.max === "5777746" && modelDownloadEvidence.half.width > 0 && modelDownloadEvidence.half.width <= modelDownloadEvidence.half.actionsWidth && modelDownloadEvidence.half.enabled && modelDownloadEvidence.half.buttonHeight >= 42, "390px model download must show real bytes without obscuring Start.");
@@ -102,7 +107,8 @@ try {
   assert(!modelDownloadEvidence.absent.bar && modelDownloadEvidence.absent.text === "Preparing tracker…", "Absent model bytes must preserve indeterminate phase text.");
   assert(modelDownloadEvidence.invalid.every((state) => !state.bar && state.text === "Preparing tracker…"), "Invalid, missing, or mismatched byte values must not show a model bar.");
   assert(modelDownloadEvidence.inactive.every((state) => !state.bar) && modelDownloadEvidence.inactive[1].text === "Tracker failed." && modelDownloadEvidence.inactive[2].text === "Cancelled.", "Idle, error, cancel, ready, and private/GPU states must not show a model bar.");
-  assert(modelDownloadEvidence.queuedTest.bar && modelDownloadEvidence.queuedTest.testBusy === "true" && modelDownloadEvidence.queuedTest.enabled, "Queued Test must retain busy truth and usable action controls.");
+  assert(modelDownloadEvidence.queuedTest.bar && modelDownloadEvidence.queuedTest.value === "4333309" && modelDownloadEvidence.queuedTest.max === "5777746" && modelDownloadEvidence.queuedTest.text === "Loading pose model: 74%" && modelDownloadEvidence.queuedTest.label === "Loading pose model: 74%" && modelDownloadEvidence.queuedTest.queueText === "Test queued after Play initialization…" && modelDownloadEvidence.queuedTest.queueRole === "status" && modelDownloadEvidence.queuedTest.queueLive === "polite" && modelDownloadEvidence.queuedTest.queueVisible && modelDownloadEvidence.queuedTest.width > 0 && modelDownloadEvidence.queuedTest.width <= modelDownloadEvidence.queuedTest.actionsWidth && modelDownloadEvidence.queuedTest.testBusy === "true" && modelDownloadEvidence.queuedTest.enabled && modelDownloadEvidence.queuedTest.testHeight >= 42, `390px compact queued Test must remain visible alongside exact real Play model bytes without starting Test or shrinking controls: ${JSON.stringify(modelDownloadEvidence.queuedTest)}`);
+  assert(modelDownloadEvidence.escapedQueue.queueText === "Test queued <after> Play & initialization…" && modelDownloadEvidence.escapedQueue.queueHtml.includes("&lt;after&gt;") && !modelDownloadEvidence.escapedQueue.queueHtml.includes("<after>"), "Queued Test pending status must be escaped before rendering.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
   assert(result.fullscreenDisabledWhenUnsupported === true, "Fullscreen unavailable state did not disable the control.");
   assert(result.fullscreenIntentCount === 2, "Disconnect/reconnect duplicated or lost fullscreen listeners.");
