@@ -558,7 +558,15 @@ export class AeroSessionActions extends AeroPresenterElement {
     const disabled = !playable;
     const describedBy = playable ? "" : ' aria-describedby="session-actions-prerequisite"';
     const pendingStatus = readString(this.presenterSnapshot, "pendingStatus", "");
-    const pendingLabel = pendingStatus ? `<p part="pending-status" role="status" aria-live="polite" style="margin:8px 0 0;padding:9px 11px;border:1px solid #79aec1;border-radius:9px;background:#dbf3fa;color:#08202c;font:700 14px/1.4 system-ui;overflow-wrap:anywhere">${escapeHtml(pendingStatus)}</p>` : "";
+    const download = readRecord(this.presenterSnapshot, "modelDownloadProgress");
+    const received = download?.receivedBytes;
+    const total = download?.totalBytes;
+    const measured = pending !== "" && typeof received === "number" && Number.isSafeInteger(received) && received >= 0 && typeof total === "number" && Number.isSafeInteger(total) && total > 0 && received <= total;
+    const percent = measured ? Math.min(100, Math.max(0, Math.floor((received / total) * 100))) : 0;
+    const progressLabel = percent === 100 ? "Model download: 100%" : `Loading pose model: ${percent}%`;
+    const pendingLabel = measured
+      ? `<div part="model-download" style="margin:8px 0 0;padding:9px 11px;border:1px solid #79aec1;border-radius:9px;background:#dbf3fa;color:#08202c;min-inline-size:0"><p part="pending-status" role="status" aria-live="polite" style="margin:0 0 5px;font:700 14px/1.4 system-ui;overflow-wrap:anywhere">${progressLabel}</p><progress part="model-download-progress" max="${total}" value="${received}" aria-label="${progressLabel}" style="display:block;inline-size:100%"></progress></div>`
+      : pendingStatus ? `<p part="pending-status" role="status" aria-live="polite" style="margin:8px 0 0;padding:9px 11px;border:1px solid #79aec1;border-radius:9px;background:#dbf3fa;color:#08202c;font:700 14px/1.4 system-ui;overflow-wrap:anywhere">${escapeHtml(pendingStatus)}</p>` : "";
     this.renderMarkup(`<div class="session-actions" part="actions" role="group" aria-label="Workout actions"><button part="start-button" type="button" data-intent="session-start" aria-current="${active === "start" ? "true" : "false"}" aria-busy="${pending === "start"}"${describedBy} ${disabled ? "disabled" : ""}>Start</button><button part="test-button" type="button" data-intent="session-test" aria-current="${active === "test" ? "true" : "false"}" aria-busy="${pending === "test"}"${describedBy} ${disabled ? "disabled" : ""}>Test</button></div>${pendingLabel}${playable ? "" : '<p id="session-actions-prerequisite" class="compact-critical live" role="status" aria-live="polite">Download Music first.</p>'}<style>.session-actions{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.session-actions button{background:linear-gradient(180deg,#ffffff,#eef2f5);border:1px solid rgba(16,52,71,.28)}.session-actions button[aria-current="true"]{background:linear-gradient(180deg,#0a84ff,#086ccf);border-color:#fff;color:#fff}</style>`);
   }
 }

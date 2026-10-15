@@ -55,6 +55,54 @@ try {
   assert(result.hudText.includes("COMBO") && result.hudText.includes("-----") && result.hudText.includes("100") && result.hudText.includes("3") && result.hudText.includes("x2") && result.hudText.includes("Athlete left") && result.hudText.includes("Spatial Grid"), "Score/combo HUD (COMBO label, separator, score, multiplier) or Track/Spatial HUD states were incomplete.");
   assert(result.sessionMissingState.disabled === true && result.sessionMissingState.prerequisite === "Download Music first." && result.disabledSessionIntentCount === 0, "Missing downloaded Music did not truthfully gate Start/Test with a minimal prerequisite.");
   assert(result.sessionPendingState.disabled === false && result.sessionPendingState.active === "Test" && result.sessionPendingState.busy === "Test", "Pending/active Test truth must remain exposed without disabling intentional restart actions.");
+  const modelDownloadEvidence = await page.evaluate(() => {
+    const host = document.createElement("aero-session-actions");
+    document.body.append(host);
+    const base = { downloadedPlayable: true, activeAction: "start", pendingAction: "start", pendingStatus: "Preparing tracker…" };
+    const inspect = () => {
+      const root = host.shadowRoot;
+      const bar = root?.querySelector("progress[part='model-download-progress']");
+      const status = root?.querySelector("[part='pending-status']");
+      const actions = root?.querySelector("[part='actions']");
+      const button = root?.querySelector("[part='start-button']");
+      const barRect = bar?.getBoundingClientRect();
+      const actionsRect = actions?.getBoundingClientRect();
+      return { text: status?.textContent?.trim() ?? "", role: status?.getAttribute("role"), live: status?.getAttribute("aria-live"), bar: Boolean(bar), value: bar?.getAttribute("value"), max: bar?.getAttribute("max"), label: bar?.getAttribute("aria-label"), width: barRect?.width ?? 0, actionsWidth: actionsRect?.width ?? 0, enabled: button?.disabled === false, buttonHeight: button?.getBoundingClientRect().height ?? 0 };
+    };
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 0, totalBytes: 5777746 } });
+    const zero = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 2888873, totalBytes: 5777746 } });
+    const half = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 5777746, totalBytes: 5777746 } });
+    const complete = inspect();
+    host.setSnapshot(base);
+    const absent = inspect();
+    const invalid = [
+      { receivedBytes: NaN, totalBytes: 5777746 }, { receivedBytes: 100, totalBytes: NaN },
+      { receivedBytes: 1, totalBytes: 0 }, { receivedBytes: -1, totalBytes: 5777746 },
+      { receivedBytes: 5777747, totalBytes: 5777746 }, { receivedBytes: 1, totalBytes: 2.5 },
+      { receivedBytes: "1", totalBytes: 5777746 }, { receivedBytes: 1 },
+      { receivedBytes: Number.MAX_SAFE_INTEGER + 1, totalBytes: Number.MAX_SAFE_INTEGER + 2 }
+    ].map((modelDownloadProgress) => { host.setSnapshot({ ...base, modelDownloadProgress }); return inspect(); });
+    const inactive = [
+      { downloadedPlayable: true, pendingAction: "", pendingStatus: "" },
+      { ...base, pendingAction: "", pendingStatus: "Tracker failed." },
+      { ...base, pendingAction: "", pendingStatus: "Cancelled." },
+      { ...base, pendingAction: "", pendingStatus: "Ready for T-pose." },
+      { ...base, pendingAction: "", pendingStatus: "Private GPU session." }
+    ].map((snapshot) => { host.setSnapshot({ ...snapshot, modelDownloadProgress: { receivedBytes: 200, totalBytes: 5777746 } }); return inspect(); });
+    host.setSnapshot({ ...base, activeAction: "start", pendingAction: "test", pendingStatus: "Test queued until tracker is ready.", modelDownloadProgress: { receivedBytes: 1000, totalBytes: 5777746 } });
+    const queuedTest = { ...inspect(), testBusy: host.shadowRoot?.querySelector("[part='test-button']")?.getAttribute("aria-busy") };
+    host.remove();
+    return { zero, half, complete, absent, invalid, inactive, queuedTest };
+  });
+  assert(modelDownloadEvidence.zero.text === "Loading pose model: 0%" && modelDownloadEvidence.zero.value === "0" && modelDownloadEvidence.zero.max === "5777746" && modelDownloadEvidence.zero.label === modelDownloadEvidence.zero.text && modelDownloadEvidence.zero.role === "status" && modelDownloadEvidence.zero.live === "polite", "Exact zero-byte model download must be labeled and accessible.");
+  assert(modelDownloadEvidence.half.text === "Loading pose model: 50%" && modelDownloadEvidence.half.value === "2888873" && modelDownloadEvidence.half.max === "5777746" && modelDownloadEvidence.half.width > 0 && modelDownloadEvidence.half.width <= modelDownloadEvidence.half.actionsWidth && modelDownloadEvidence.half.enabled && modelDownloadEvidence.half.buttonHeight >= 42, "390px model download must show real bytes without obscuring Start.");
+  assert(modelDownloadEvidence.complete.text === "Model download: 100%" && modelDownloadEvidence.complete.value === "5777746" && !/initializ|startup|ready/i.test(modelDownloadEvidence.complete.text), "100% must describe model download only.");
+  assert(!modelDownloadEvidence.absent.bar && modelDownloadEvidence.absent.text === "Preparing tracker…", "Absent model bytes must preserve indeterminate phase text.");
+  assert(modelDownloadEvidence.invalid.every((state) => !state.bar && state.text === "Preparing tracker…"), "Invalid, missing, or mismatched byte values must not show a model bar.");
+  assert(modelDownloadEvidence.inactive.every((state) => !state.bar) && modelDownloadEvidence.inactive[1].text === "Tracker failed." && modelDownloadEvidence.inactive[2].text === "Cancelled.", "Idle, error, cancel, ready, and private/GPU states must not show a model bar.");
+  assert(modelDownloadEvidence.queuedTest.bar && modelDownloadEvidence.queuedTest.testBusy === "true" && modelDownloadEvidence.queuedTest.enabled, "Queued Test must retain busy truth and usable action controls.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
   assert(result.fullscreenDisabledWhenUnsupported === true, "Fullscreen unavailable state did not disable the control.");
   assert(result.fullscreenIntentCount === 2, "Disconnect/reconnect duplicated or lost fullscreen listeners.");
