@@ -1106,22 +1106,24 @@ try {
       library.addEventListener("aero:ui:intent", (event) => { if (event instanceof CustomEvent) events.push(event.detail); });
       const base = library.presenterSnapshot;
       const update = (bulkReimport) => library.setSnapshot({ ...base, bulkReimport });
+      // Compact is the in-game menu: bulk progress text is intentionally hidden there.
+      // Its Reimport All button must still reflect running state and emit intents.
       update({ state: "running", completed: 1, total: 2, reimported: 1, skipped: 0, failed: 0, message: "Downloading 2 songs" });
-      const running = { role: status()?.getAttribute("role"), live: status()?.getAttribute("aria-live"), text: status()?.textContent ?? "", disabled: button()?.disabled };
+      const running = { hidden: status() === null, disabled: button()?.disabled };
       button()?.click();
       update({ state: "complete", completed: 2, total: 2, reimported: 2, skipped: 0, failed: 0, message: "Songs updated." });
-      const success = { role: status()?.getAttribute("role"), text: status()?.textContent ?? "", disabled: button()?.disabled };
+      const success = { hidden: status() === null, disabled: button()?.disabled };
       button()?.click();
       update({ state: "complete", completed: 2, total: 2, reimported: 0, skipped: 2, failed: 0, message: "Local files cannot be reimported." });
-      const skipped = status()?.textContent ?? "";
+      const skippedHidden = status() === null;
       update({ state: "cancelled", completed: 1, total: 2, reimported: 1, skipped: 0, failed: 0, message: "Reimport All cancelled after 1 of 2 songs; remaining songs were not attempted." });
-      const cancelled = { role: status()?.getAttribute("role"), live: status()?.getAttribute("aria-live"), text: status()?.textContent ?? "", disabled: button()?.disabled };
+      const cancelled = { hidden: status() === null, disabled: button()?.disabled };
       button()?.click();
       update({ state: "failed", completed: 1, total: 2, reimported: 0, skipped: 1, failed: 1, message: "Could not reimport <song> & retry." });
-      const failure = { role: status()?.getAttribute("role"), live: status()?.getAttribute("aria-live"), text: status()?.textContent ?? "", html: status()?.innerHTML ?? "", disabled: button()?.disabled };
-      return { running, success, skipped, cancelled, failure, events };
+      const failure = { hidden: status() === null, disabled: button()?.disabled };
+      return { running, success, skippedHidden, cancelled, failure, events };
     });
-    assert(bulkEvidence?.running.role === "status" && bulkEvidence.running.live === "polite" && bulkEvidence.running.text.includes("1 of 2") && bulkEvidence.running.disabled && bulkEvidence.success.role === "status" && bulkEvidence.success.text.includes("2 reimported") && !bulkEvidence.success.disabled && bulkEvidence.skipped.includes("0 reimported, 2 skipped, 0 failed") && bulkEvidence.cancelled.role === "status" && bulkEvidence.cancelled.live === "polite" && bulkEvidence.cancelled.text.includes("Reimport All cancelled after 1 of 2 songs") && bulkEvidence.cancelled.text.includes("remaining songs were not attempted") && !bulkEvidence.cancelled.text.includes("Reimport complete") && !bulkEvidence.cancelled.disabled && bulkEvidence.failure.role === "alert" && bulkEvidence.failure.live === "assertive" && bulkEvidence.failure.text.includes("Could not reimport <song> & retry.") && !bulkEvidence.failure.html.includes("<song>") && !bulkEvidence.failure.disabled && bulkEvidence.events.length === 2 && bulkEvidence.events.every((event) => event.type === "library-reimport-all" && Object.keys(event.payload).length === 0), `${viewport.name} bulk reimport presentation/intent failed: ${JSON.stringify(bulkEvidence)}`);
+    assert(bulkEvidence?.running.hidden && bulkEvidence.running.disabled && bulkEvidence.success.hidden && !bulkEvidence.success.disabled && bulkEvidence.skippedHidden && bulkEvidence.cancelled.hidden && !bulkEvidence.cancelled.disabled && bulkEvidence.failure.hidden && !bulkEvidence.failure.disabled && bulkEvidence.events.length === 2 && bulkEvidence.events.every((event) => event.type === "library-reimport-all" && Object.keys(event.payload).length === 0), `${viewport.name} compact bulk reimport presentation/intent failed: ${JSON.stringify(bulkEvidence)}`);
     await musicPage.screenshot({ path: `screenshots/task12-ui-music-radios-${viewport.name}.png`, fullPage: true });
     await musicPage.close();
   }
