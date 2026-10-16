@@ -72,21 +72,34 @@ try {
       const queueRect = queue?.getBoundingClientRect();
       const percentRect = percent?.getBoundingClientRect();
       const visibleCopy = Array.from(root?.querySelectorAll("p, [part='model-download-percent']") ?? []).filter((element) => getComputedStyle(element).display !== "none").map((element) => element.textContent?.trim() ?? "");
-      return { text: status?.textContent?.trim() ?? "", percent: percent?.textContent?.trim() ?? "", percentVisible: Boolean(percentRect && barRect && percentRect.width > 0 && percentRect.height > 0 && percentRect.left >= barRect.right && percentRect.right <= innerWidth && percentRect.bottom <= innerHeight), visibleCopy, panel: Boolean(root?.querySelector("[part='model-download']")), role: status?.getAttribute("role"), live: status?.getAttribute("aria-live"), queueText: queue?.textContent?.trim() ?? "", queueHtml: queue?.innerHTML ?? "", queueRole: queue?.getAttribute("role"), queueLive: queue?.getAttribute("aria-live"), queueVisible: Boolean(queue && queueRect && queueRect.width >= 80 && queueRect.height > 0 && queueRect.left >= 0 && queueRect.right <= innerWidth && queueRect.bottom <= innerHeight && getComputedStyle(queue).visibility === "visible"), bar: Boolean(bar), value: bar?.getAttribute("value"), max: bar?.getAttribute("max"), label: bar?.getAttribute("aria-label"), width: barRect?.width ?? 0, actionsWidth: actionsRect?.width ?? 0, enabled: button?.disabled === false, buttonHeight: button?.getBoundingClientRect().height ?? 0 };
+      return { text: status?.textContent?.trim() ?? "", percent: percent?.textContent?.trim() ?? "", progressCount: root?.querySelectorAll("progress").length ?? 0, slotCount: root?.querySelectorAll("[part='model-download-percent']").length ?? 0, percentVisible: Boolean(percentRect && barRect && percentRect.width > 0 && percentRect.height > 0 && percentRect.left >= barRect.right && percentRect.right <= innerWidth && percentRect.bottom <= innerHeight), visibleCopy, panel: Boolean(root?.querySelector("[part='model-download']")), role: status?.getAttribute("role"), live: status?.getAttribute("aria-live"), queueText: queue?.textContent?.trim() ?? "", queueHtml: queue?.innerHTML ?? "", queueRole: queue?.getAttribute("role"), queueLive: queue?.getAttribute("aria-live"), queueVisible: Boolean(queue && queueRect && queueRect.width >= 80 && queueRect.height > 0 && queueRect.left >= 0 && queueRect.right <= innerWidth && queueRect.bottom <= innerHeight && getComputedStyle(queue).visibility === "visible"), bar: Boolean(bar), value: bar?.getAttribute("value"), max: bar?.getAttribute("max"), label: bar?.getAttribute("aria-label"), width: barRect?.width ?? 0, actionsWidth: actionsRect?.width ?? 0, enabled: button?.disabled === false, buttonHeight: button?.getBoundingClientRect().height ?? 0 };
     };
-    // Exact selected classic SIMD tracker assets: pinned Lite model plus
-    // Tasks Vision 1.0.1 runtime loader JS and actual WASM binary.
-    const totalTrackerAssets = 5777746 + 323377 + 11756954;
-    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 0, totalBytes: totalTrackerAssets } });
+    // Only actual received Lite pose-model bytes measure this bar.
+    const totalModelBytes = 5777746;
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 0, totalBytes: totalModelBytes } });
     const zero = inspect();
-    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 2888873, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 2888873, totalBytes: totalModelBytes } });
     const half = inspect();
-    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalModelBytes } });
     const seventyFour = inspect();
-    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 5777746, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: 5777746, totalBytes: totalModelBytes } });
     const modelComplete = inspect();
-    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalTrackerAssets, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes } });
     const complete = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, modelVerified: true } });
+    const verifiedOnly = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, almostReady: true } });
+    const unverified = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalModelBytes - 1, totalBytes: totalModelBytes, modelVerified: true, almostReady: true } });
+    const incomplete = inspect();
+    host.setSnapshot({ ...base, modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, modelVerified: true, almostReady: true } });
+    const almostReady = inspect();
+    host.setSnapshot({ ...base, pendingAction: "test", pendingStatus: "Test queued after Play initialization…", modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, modelVerified: true, almostReady: true } });
+    const queuedAlmostReady = inspect();
+    host.setSnapshot({ ...base, pendingStatus: "Tracker failed.", modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, modelVerified: true, almostReady: true } });
+    const failed = inspect();
+    host.setSnapshot({ ...base, pendingStatus: "Cancelled.", modelDownloadProgress: { receivedBytes: totalModelBytes, totalBytes: totalModelBytes, modelVerified: true, almostReady: true } });
+    const cancelled = inspect();
     host.setSnapshot(base);
     const absent = inspect();
     host.setSnapshot({ ...base, pendingStatus: "Preparing Play: starting camera and loading pose assets…" });
@@ -94,7 +107,7 @@ try {
     const invalid = [
       { receivedBytes: NaN, totalBytes: 5777746 }, { receivedBytes: 100, totalBytes: NaN },
       { receivedBytes: 1, totalBytes: 0 }, { receivedBytes: -1, totalBytes: 5777746 },
-      { receivedBytes: 5777747, totalBytes: 5777746 }, { receivedBytes: 1, totalBytes: 2.5 },
+      { receivedBytes: 5777747, totalBytes: 5777746 }, { receivedBytes: 1, totalBytes: 2.5, modelVerified: true, almostReady: true },
       { receivedBytes: "1", totalBytes: 5777746 }, { receivedBytes: 1 },
       { receivedBytes: Number.MAX_SAFE_INTEGER + 1, totalBytes: Number.MAX_SAFE_INTEGER + 2 }
     ].map((modelDownloadProgress) => { host.setSnapshot({ ...base, modelDownloadProgress }); return inspect(); });
@@ -104,25 +117,27 @@ try {
       { ...base, pendingAction: "", pendingStatus: "Cancelled." },
       { ...base, pendingAction: "", pendingStatus: "Ready for T-pose." },
       { ...base, pendingAction: "", pendingStatus: "Private GPU session." }
-    ].map((snapshot) => { host.setSnapshot({ ...snapshot, modelDownloadProgress: { receivedBytes: 200, totalBytes: 5777746 } }); return inspect(); });
+    ].map((snapshot) => { host.setSnapshot({ ...snapshot, modelDownloadProgress: { receivedBytes: 5777746, totalBytes: 5777746, modelVerified: true, almostReady: true } }); return inspect(); });
     host.compact = true;
     host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Preparing Test…" });
     const standaloneTest = { ...inspect(), testBusy: host.shadowRoot?.querySelector("[part='test-button']")?.getAttribute("aria-busy"), testHeight: host.shadowRoot?.querySelector("[part='test-button']")?.getBoundingClientRect().height ?? 0 };
-    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued after Play initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued after Play initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalModelBytes } });
     const queuedTest = { ...inspect(), testBusy: host.shadowRoot?.querySelector("[part='test-button']")?.getAttribute("aria-busy"), testHeight: host.shadowRoot?.querySelector("[part='test-button']")?.getBoundingClientRect().height ?? 0 };
-    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued <after> Play & initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalTrackerAssets } });
+    host.setSnapshot({ downloadedPlayable: true, activeAction: "", pendingAction: "test", pendingStatus: "Test queued <after> Play & initialization…", modelDownloadProgress: { receivedBytes: 4333309, totalBytes: totalModelBytes } });
     const escapedQueue = inspect();
     host.remove();
-    return { zero, half, seventyFour, modelComplete, complete, absent, preparingPlay, invalid, inactive, standaloneTest, queuedTest, escapedQueue };
+    return { zero, half, seventyFour, modelComplete, complete, verifiedOnly, unverified, incomplete, almostReady, queuedAlmostReady, failed, cancelled, absent, preparingPlay, invalid, inactive, standaloneTest, queuedTest, escapedQueue };
   });
-  const measuredStates = [[modelDownloadEvidence.zero, "0%", "0"], [modelDownloadEvidence.half, "16%", "2888873"], [modelDownloadEvidence.seventyFour, "24%", "4333309"], [modelDownloadEvidence.modelComplete, "32%", "5777746"], [modelDownloadEvidence.complete, "100%", "17858077"]];
-  assert(measuredStates.every(([state, percent, bytes]) => state.bar && state.value === bytes && state.max === "17858077" && state.percent === percent && state.percentVisible && state.label === "Tracker asset download" && state.text === "" && state.visibleCopy.length === 1 && state.visibleCopy[0] === percent && !state.panel && state.width > 0 && state.width <= state.actionsWidth && state.enabled && state.buttonHeight >= 42), `390px real model plus WASM asset bytes must show only native bar and adjacent bare numeric percent, not loading prose or panel: ${JSON.stringify(modelDownloadEvidence)}`);
-  assert(modelDownloadEvidence.modelComplete.percent === "32%" && modelDownloadEvidence.complete.percent === "100%" && !/calibrat|song|startup|ready/i.test(modelDownloadEvidence.complete.label), "Model EOF must remain below 100% until selected runtime assets load; calibration never counts.");
+  const measuredStates = [[modelDownloadEvidence.zero, "0%", "0"], [modelDownloadEvidence.half, "50%", "2888873"], [modelDownloadEvidence.seventyFour, "74%", "4333309"], [modelDownloadEvidence.modelComplete, "100%", "5777746"], [modelDownloadEvidence.complete, "100%", "5777746"], [modelDownloadEvidence.verifiedOnly, "100%", "5777746"], [modelDownloadEvidence.unverified, "100%", "5777746"], [modelDownloadEvidence.incomplete, "99%", "5777745"]];
+  assert(measuredStates.every(([state, percent, bytes]) => state.bar && state.progressCount === 1 && state.slotCount === 1 && state.value === bytes && state.max === "5777746" && state.percent === percent && state.percentVisible && state.label === "Pose model download" && state.text === "" && state.visibleCopy.length === 1 && state.visibleCopy[0] === percent && !state.panel && state.width > 0 && state.width <= state.actionsWidth && state.enabled && state.buttonHeight >= 42), `390px model-only bytes must show only native bar and adjacent bare numeric percent without loading prose or panel: ${JSON.stringify(modelDownloadEvidence)}`);
+  assert(modelDownloadEvidence.almostReady.bar && modelDownloadEvidence.almostReady.progressCount === 1 && modelDownloadEvidence.almostReady.slotCount === 1 && modelDownloadEvidence.almostReady.value === "5777746" && modelDownloadEvidence.almostReady.max === "5777746" && modelDownloadEvidence.almostReady.percent === "Almost Ready" && modelDownloadEvidence.almostReady.percentVisible && modelDownloadEvidence.almostReady.visibleCopy.join("|") === "Almost Ready" && modelDownloadEvidence.almostReady.label === "Pose model download" && !modelDownloadEvidence.almostReady.panel, "Verified complete model must replace the previously visible 100% in the SAME bare text slot alongside the one full native bar; WASM may still download.");
+  assert(modelDownloadEvidence.queuedAlmostReady.progressCount === 1 && modelDownloadEvidence.queuedAlmostReady.slotCount === 1 && modelDownloadEvidence.queuedAlmostReady.percent === "Almost Ready" && modelDownloadEvidence.queuedAlmostReady.visibleCopy.join("|") === "Test queued after Play initialization…|Almost Ready" && modelDownloadEvidence.queuedAlmostReady.queueVisible, "Queued Test retains its existing text while the one model progress slot becomes Almost Ready.");
+  assert([modelDownloadEvidence.failed, modelDownloadEvidence.cancelled].every((state) => !state.bar && state.slotCount === 0 && !state.visibleCopy.includes("Almost Ready")), "Pending error/cancel must not keep stale Almost Ready visible.");
   assert([modelDownloadEvidence.absent, modelDownloadEvidence.preparingPlay].every((state) => state.bar && state.value === null && state.percent === "" && state.visibleCopy.length === 0 && !state.panel), "Pre-byte Play, including original camera/assets prose, must show only an indeterminate bar without invented percent or prose.");
   assert(modelDownloadEvidence.invalid.every((state) => state.bar && state.value === null && state.percent === "" && state.visibleCopy.length === 0 && !state.panel), "Invalid or missing model bytes must remain indeterminate without fabricated percentage or prose.");
   assert(modelDownloadEvidence.inactive.every((state) => !state.bar) && modelDownloadEvidence.inactive[1].text === "Tracker failed." && modelDownloadEvidence.inactive[2].text === "Cancelled.", "Idle, error, cancel, ready, and private/GPU states must not show a model bar.");
   assert(!modelDownloadEvidence.standaloneTest.bar && modelDownloadEvidence.standaloneTest.percent === "" && modelDownloadEvidence.standaloneTest.text === "Preparing Test…" && modelDownloadEvidence.standaloneTest.visibleCopy.join("|") === "Preparing Test…" && modelDownloadEvidence.standaloneTest.role === "status" && modelDownloadEvidence.standaloneTest.live === "polite" && modelDownloadEvidence.standaloneTest.queueText === "" && modelDownloadEvidence.standaloneTest.testBusy === "true" && modelDownloadEvidence.standaloneTest.enabled && modelDownloadEvidence.standaloneTest.testHeight >= 42, `390px standalone audio-only Test must retain its status and controls without a false pose-model bar or new UI: ${JSON.stringify(modelDownloadEvidence.standaloneTest)}`);
-  assert(modelDownloadEvidence.queuedTest.bar && modelDownloadEvidence.queuedTest.value === "4333309" && modelDownloadEvidence.queuedTest.max === "17858077" && modelDownloadEvidence.queuedTest.percent === "24%" && modelDownloadEvidence.queuedTest.visibleCopy.join("|") === "Test queued after Play initialization…|24%" && !modelDownloadEvidence.queuedTest.panel && modelDownloadEvidence.queuedTest.queueText === "Test queued after Play initialization…" && modelDownloadEvidence.queuedTest.queueRole === "status" && modelDownloadEvidence.queuedTest.queueLive === "polite" && modelDownloadEvidence.queuedTest.queueVisible && modelDownloadEvidence.queuedTest.width > 0 && modelDownloadEvidence.queuedTest.width <= modelDownloadEvidence.queuedTest.actionsWidth && modelDownloadEvidence.queuedTest.testBusy === "true" && modelDownloadEvidence.queuedTest.enabled && modelDownloadEvidence.queuedTest.testHeight >= 42, `390px compact queued Test must remain visible alongside the bare real Play model percent without duplicate status or shrinking controls: ${JSON.stringify(modelDownloadEvidence.queuedTest)}`);
+  assert(modelDownloadEvidence.queuedTest.bar && modelDownloadEvidence.queuedTest.value === "4333309" && modelDownloadEvidence.queuedTest.max === "5777746" && modelDownloadEvidence.queuedTest.percent === "74%" && modelDownloadEvidence.queuedTest.visibleCopy.join("|") === "Test queued after Play initialization…|74%" && !modelDownloadEvidence.queuedTest.panel && modelDownloadEvidence.queuedTest.queueText === "Test queued after Play initialization…" && modelDownloadEvidence.queuedTest.queueRole === "status" && modelDownloadEvidence.queuedTest.queueLive === "polite" && modelDownloadEvidence.queuedTest.queueVisible && modelDownloadEvidence.queuedTest.width > 0 && modelDownloadEvidence.queuedTest.width <= modelDownloadEvidence.queuedTest.actionsWidth && modelDownloadEvidence.queuedTest.testBusy === "true" && modelDownloadEvidence.queuedTest.enabled && modelDownloadEvidence.queuedTest.testHeight >= 42, `390px compact queued Test must remain visible alongside the bare real Play model percent without duplicate status or shrinking controls: ${JSON.stringify(modelDownloadEvidence.queuedTest)}`);
   assert(modelDownloadEvidence.escapedQueue.queueText === "Test queued <after> Play & initialization…" && modelDownloadEvidence.escapedQueue.queueHtml.includes("&lt;after&gt;") && !modelDownloadEvidence.escapedQueue.queueHtml.includes("<after>"), "Queued Test pending status must be escaped before rendering.");
   assert(JSON.stringify(result.sessionReadyButtons) === JSON.stringify([{ text: "Start", disabled: false, current: "true" }, { text: "Test", disabled: false, current: "false" }]), "Ready Start/Test labels, enablement, or active truth changed.");
   assert(result.fullscreenDisabledWhenUnsupported === true, "Fullscreen unavailable state did not disable the control.");
