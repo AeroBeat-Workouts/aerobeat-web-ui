@@ -28,16 +28,19 @@ const all=['Nose','Left Wrist','Right Wrist','Left Shoulder','Right Shoulder','L
 const states={
  'knee-flicker':{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'',missing:['Right Knee'],cue:'T-pose',detail:'Right knee lost · hold resets',elapsed:'0 / 2 sec',progress:0,sample:'SYNTHETIC REVIEW · partial knee flicker · hold reset'},
  holding:{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'All required landmarks visible in this frame.',missing:[],cue:'Hold T-pose',detail:'Keep arms level and elbows straight',elapsed:'1.2 / 2 sec',progress:60,sample:'SYNTHETIC REVIEW · holding · 1.2 / 2 sec'},
- complete:{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'Two-second T-pose captured.',missing:[],cue:'Release',detail:'Calibration complete · release pose',elapsed:'2 / 2 sec',progress:100,sample:'SYNTHETIC REVIEW · complete · release pose'},
+ countdown:{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'',missing:[],cue:'3',detail:'',elapsed:'0 / 2 sec',progress:0,sample:'SYNTHETIC REVIEW · immediate 3 / 2 / 1 after T-pose'},
  flow:{mode:'FLOW · KNEES NOT REQUIRED',subtitle:'Upper-body landmarks only.',missing:[],cue:'Hold T-pose',detail:'Knee rows omitted in Flow',elapsed:'0.8 / 2 sec',progress:40,sample:'SYNTHETIC REVIEW · Flow · no knee rows',knees:false},
  'boxing-knees-off':{mode:'BOXING · KNEE STRIKES OFF',subtitle:'Upper-body landmarks only.',missing:[],cue:'T-pose',detail:'Knee rows omitted while knee strikes are off',elapsed:'0 / 2 sec',progress:0,sample:'SYNTHETIC REVIEW · Boxing knee strikes off',knees:false}
 };
 const key=new URLSearchParams(location.search).get('state')||'knee-flicker';const state=states[key]||states['knee-flicker'];
+document.querySelector('.panel').hidden=key==='countdown';
 const row=(label,status,value)=>{const li=document.createElement('li');li.className=`row ${status}`;const icon=document.createElement('span');icon.className='icon';icon.setAttribute('aria-hidden','true');icon.textContent=status==='missing'?'!':status==='waiting'?'·':'✓';const name=document.createElement('span');name.textContent=label;const output=document.createElement('span');output.className='value';output.textContent=value;li.append(icon,name,output);return li};
-for(const label of all.filter(label=>state.knees!==false||!label.includes('Knee'))){const missing=state.missing.includes(label);document.querySelector('#landmarks').append(row(label,missing?'missing':'seen',missing?'Missing':'Seen'))}
-const poseStatus=key==='knee-flicker'?'waiting':key==='complete'?'done':key==='boxing-knees-off'?'waiting':'holding';
-for(const label of ['Arms level','Elbows straight'])document.querySelector('#pose').append(row(label,key==='boxing-knees-off'?'waiting':'seen',key==='boxing-knees-off'?'Waiting':'Ready'));
-document.querySelector('#pose').append(row('Hold T-pose for 2 seconds',poseStatus,key==='complete'?'Complete':poseStatus==='holding'?'Holding':'Waiting'));
+for(const label of (key==='countdown'?[]:all.filter(label=>state.knees!==false||!label.includes('Knee')))){const missing=state.missing.includes(label);document.querySelector('#landmarks').append(row(label,missing?'missing':'seen',missing?'Missing':'Seen'))}
+const poseStatus=key==='knee-flicker'||key==='boxing-knees-off'?'waiting':'holding';
+if(key!=='countdown'){
+ for(const label of ['Arms level','Elbows straight'])document.querySelector('#pose').append(row(label,key==='boxing-knees-off'?'waiting':'seen',key==='boxing-knees-off'?'Waiting':'Ready'));
+ document.querySelector('#pose').append(row('Hold T-pose for 2 seconds',poseStatus,poseStatus==='holding'?'Holding':'Waiting'));
+}
 for(const [id,value] of Object.entries({mode:state.mode,subtitle:state.subtitle,cueText:state.cue,detail:state.detail,elapsed:state.elapsed,sample:state.sample}))document.getElementById(id).textContent=value;
 document.getElementById('subtitle').hidden=!state.subtitle;
 document.querySelector('#progress').style.setProperty('--progress',`${state.progress}%`);document.querySelector('#progress').setAttribute('aria-label',`Hold progress ${state.elapsed}`);

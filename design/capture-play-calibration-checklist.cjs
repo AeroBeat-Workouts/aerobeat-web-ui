@@ -10,12 +10,12 @@ const design = pathToFileURL(path.join(__dirname, 'play-calibration-checklist.ht
 const cases = [
   ['phone-portrait-knee-flicker', 'knee-flicker', 390, 844],
   ['phone-portrait-holding', 'holding', 390, 844],
-  ['phone-portrait-complete', 'complete', 390, 844],
+  ['phone-portrait-countdown', 'countdown', 390, 844],
   ['phone-portrait-flow', 'flow', 390, 844],
   ['phone-portrait-boxing-knees-off', 'boxing-knees-off', 390, 844],
   ['desktop-knee-flicker', 'knee-flicker', 1440, 900],
   ['desktop-holding', 'holding', 1440, 900],
-  ['desktop-complete', 'complete', 1440, 900],
+  ['desktop-countdown', 'countdown', 1440, 900],
   ['phone-landscape-knee-flicker', 'knee-flicker', 844, 390],
   ['phone-landscape-flow', 'flow', 844, 390]
 ];
@@ -38,6 +38,8 @@ const cases = [
           values: [...document.querySelectorAll('.row > .value')].map(element => element.textContent),
           panel: (() => { const r = document.querySelector('.panel').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom } })(),
           mode: document.querySelector('#mode').textContent,
+          cue: document.querySelector('#cueText').textContent,
+          panelHidden: document.querySelector('.panel').hidden,
           subtitle: document.querySelector('#subtitle').textContent,
           subtitleHidden: document.querySelector('#subtitle').hidden,
           sample: document.querySelector('#sample').textContent
@@ -45,10 +47,10 @@ const cases = [
         assert.deepEqual(errors, [], name);
         assert.equal(observed.width, width, name);
         assert.equal(observed.height, height, name);
-        assert.equal(observed.labels.length, state === 'flow' || state === 'boxing-knees-off' ? 10 : 12, name);
-        assert.ok(observed.labels.includes('Hold T-pose for 2 seconds'), name);
-        assert.equal(observed.labels.includes('Left Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
-        assert.equal(observed.labels.includes('Right Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
+        assert.equal(observed.labels.length, state === 'countdown' ? 0 : state === 'flow' || state === 'boxing-knees-off' ? 10 : 12, name);
+        assert.equal(observed.labels.includes('Hold T-pose for 2 seconds'), state !== 'countdown', name);
+        assert.equal(observed.labels.includes('Left Knee'), state !== 'flow' && state !== 'boxing-knees-off' && state !== 'countdown', name);
+        assert.equal(observed.labels.includes('Right Knee'), state !== 'flow' && state !== 'boxing-knees-off' && state !== 'countdown', name);
         assert.ok(observed.labels.every(label => !label.startsWith('Visible ')), `${name}: landmark labels must omit Visible`);
         assert.ok(observed.panel.left >= 0 && observed.panel.right <= width && observed.panel.top >= 0 && observed.panel.bottom <= height, name);
         if (state === 'knee-flicker') {
@@ -57,7 +59,10 @@ const cases = [
           assert.equal(observed.subtitle, '', `${name}: requested redundant knee instruction must be removed`);
           assert.equal(observed.subtitleHidden, true, `${name}: removed instruction must leave no blank line`);
         }
-        if (state === 'complete') assert.equal(observed.values.at(-1), 'Complete', name);
+        if (state === 'countdown') {
+          assert.equal(observed.cue, '3', `${name}: immediate native countdown wins over a Release pose`);
+          assert.equal(observed.panelHidden, true, `${name}: calibration card must disappear on countdown`);
+        } else assert.equal(observed.panelHidden, false, name);
         await page.screenshot({ path: path.join(output, `${name}.png`) });
         console.log(`${name}.png ${width}x${height} ${observed.sample}`);
       } finally { await context.close(); }

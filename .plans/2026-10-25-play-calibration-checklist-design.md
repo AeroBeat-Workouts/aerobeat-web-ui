@@ -1,6 +1,6 @@
 # Play calibration checklist — screenshot approval checkpoint
 
-**Status:** Design revision 3 approved by Derrick on 2026-10-25, conditional on removing “Visible” from all landmark labels and deleting the “Both knees must...” line. Both requested changes were applied; the updated portrait, landscape and desktop screenshots were regenerated and visually checked. Owner: aerobeat-web-ui, current main. Parent: assembly `.plans/2026-10-25-boxing-heights-fixed-colliders-knee-calibration.md`, task D. This owner repo remains design-only; assembly production implementation is separately tracked.
+**Status:** Design revision 4 approved by Derrick on 2026-10-25. Revision 3 removed “Visible” from all landmark labels and deleted the redundant knee line, as requested. The real Play lifecycle then proved that fresh calibration goes immediately to countdown `3`, so Derrick chose to preserve that timing and revise the old “Release / Complete” concept instead of adding a pause. Two revised portrait/desktop countdown screenshots now replace the old complete screenshots. Owner: aerobeat-web-ui, main. Parent: assembly `.plans/2026-10-25-boxing-heights-fixed-colliders-knee-calibration.md`. Design only; no public release changes.
 
 ## Decision and next check
 
@@ -15,7 +15,7 @@ A compact static HTML/CSS concept shows current-frame detector statuses inside a
 
 ## State inventory and capture
 
-The standalone file uses synthetic static examples chosen by the `?state=` query: `knee-flicker` (left knee visible, right knee briefly lost, hold resets to zero), `holding` (all nine visible; hold at 1.2/2 seconds), `complete` (all nine visible and 2/2 seconds), `flow` (seven upper-body rows only, knees not required), and `boxing-knees-off` (same seven rows only). The Boxing mode eyebrow explicitly shows **Knee strikes ON · 0% chance** to demonstrate that zero probability still requires both knees, without an extra knee-instruction line. Nine landmark labels omit “Visible” and show plain names such as “Right Knee”. Textual `Seen`/`Missing`/`Waiting`/`Holding`/`Complete` statuses accompany icons and color. Rows represent momentary detector state, not interactive or latched checkboxes. Completion is a sample captured state, not a claim that a physical user was calibrated.
+The standalone file uses synthetic static examples chosen by the `?state=` query: `knee-flicker` (left knee visible, right knee briefly lost, hold resets to zero), `holding` (all nine visible; hold at 1.2/2 seconds), `countdown` (immediate native `3`, checklist hidden after completed hold), `flow` (seven upper-body rows only, knees not required), and `boxing-knees-off` (same seven rows only). The Boxing mode eyebrow explicitly shows **Knee strikes ON · 0% chance** to demonstrate that zero probability still requires both knees, without an extra knee-instruction line. Nine landmark labels omit “Visible” and show plain names such as “Right Knee”. Textual `Seen`/`Missing`/`Waiting`/`Holding`/`Complete` statuses accompany icons and color. Rows represent momentary detector state, not interactive or latched checkboxes. The immediate countdown state is a synthetic sample after calibration, not a claim that a physical user was calibrated.
 
 From owner repo root, run `node design/capture-play-calibration-checklist.cjs`. It uses the existing assembly `node_modules/playwright` and installed Chromium executable; no web server, network, device camera, installed product, or public route. Canonical captures use 390×844 portrait, 1440×900 desktop, and 844×390 phone landscape, device scale 1, with animation suppressed and fonts awaited. The script asserts all row labels, the knee present/absent contract and viewport geometry, and writes ten labeled PNGs; screenshot-only visual review is **not** production fidelity verification. Browser dependencies must exist locally; do not vendor them into owner repo.
 
@@ -26,6 +26,10 @@ Owner repo has no Beads database (`bd ready --json`: no database). Parent assemb
 ## Outcome
 
 Approved design-only, synthetic browser screenshots for assembly task E. No production screenshot or public route change; the current mockup captures are not yet real-app fidelity evidence.
+
+## Revision 4 — preserve immediate countdown
+
+The connected Play fidelity check exposed a conflict in revision 3: its “Release / Complete” sample never paints, because the input's committed two-second calibration and Gameplay's 3/2/1 countdown start in the same display frame. Derrick explicitly chose **Keep immediate countdown** rather than delaying playback to show a new completion screen, and authorized a revised mockup. Revision 4 replaces the two `complete` samples with `countdown` samples: cue `3`, checklist hidden. The ten-state capture script checks that the panel is hidden, no checklist rows remain, and cue `3` is visible in portrait and desktop. All other eight states retain their approved revision-3 wording and layout. The synthetic scene is not real game art; assembly's connected Play fidelity check still compares its actual cue/card separately. This decision does not modify the input gate or the public route.
 
 ## Revision 3 — Derrick's conditional approval, now satisfied
 
