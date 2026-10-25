@@ -38,6 +38,8 @@ const cases = [
           values: [...document.querySelectorAll('.row > .value')].map(element => element.textContent),
           panel: (() => { const r = document.querySelector('.panel').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom } })(),
           mode: document.querySelector('#mode').textContent,
+          subtitle: document.querySelector('#subtitle').textContent,
+          subtitleHidden: document.querySelector('#subtitle').hidden,
           sample: document.querySelector('#sample').textContent
         }));
         assert.deepEqual(errors, [], name);
@@ -45,12 +47,15 @@ const cases = [
         assert.equal(observed.height, height, name);
         assert.equal(observed.labels.length, state === 'flow' || state === 'boxing-knees-off' ? 10 : 12, name);
         assert.ok(observed.labels.includes('Hold T-pose for 2 seconds'), name);
-        assert.equal(observed.labels.includes('Visible Left Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
-        assert.equal(observed.labels.includes('Visible Right Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
+        assert.equal(observed.labels.includes('Left Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
+        assert.equal(observed.labels.includes('Right Knee'), state !== 'flow' && state !== 'boxing-knees-off', name);
+        assert.ok(observed.labels.every(label => !label.startsWith('Visible ')), `${name}: landmark labels must omit Visible`);
         assert.ok(observed.panel.left >= 0 && observed.panel.right <= width && observed.panel.top >= 0 && observed.panel.bottom <= height, name);
         if (state === 'knee-flicker') {
           assert.equal(observed.values[8], 'Missing', name);
           assert.ok(observed.mode.includes('0% CHANCE'), name);
+          assert.equal(observed.subtitle, '', `${name}: requested redundant knee instruction must be removed`);
+          assert.equal(observed.subtitleHidden, true, `${name}: removed instruction must leave no blank line`);
         }
         if (state === 'complete') assert.equal(observed.values.at(-1), 'Complete', name);
         await page.screenshot({ path: path.join(output, `${name}.png`) });

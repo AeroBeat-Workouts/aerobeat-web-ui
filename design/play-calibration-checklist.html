@@ -24,9 +24,9 @@
 <div class="sample" id="sample"></div>
 </main>
 <script>
-const all=['Visible Nose','Visible Left Wrist','Visible Right Wrist','Visible Left Shoulder','Visible Right Shoulder','Visible Left Elbow','Visible Right Elbow','Visible Left Knee','Visible Right Knee'];
+const all=['Nose','Left Wrist','Right Wrist','Left Shoulder','Right Shoulder','Left Elbow','Right Elbow','Left Knee','Right Knee'];
 const states={
- 'knee-flicker':{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'Both knees must be visible now, even at 0%.',missing:['Visible Right Knee'],cue:'T-pose',detail:'Right knee lost · hold resets',elapsed:'0 / 2 sec',progress:0,sample:'SYNTHETIC REVIEW · partial knee flicker · hold reset'},
+ 'knee-flicker':{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'',missing:['Right Knee'],cue:'T-pose',detail:'Right knee lost · hold resets',elapsed:'0 / 2 sec',progress:0,sample:'SYNTHETIC REVIEW · partial knee flicker · hold reset'},
  holding:{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'All required landmarks visible in this frame.',missing:[],cue:'Hold T-pose',detail:'Keep arms level and elbows straight',elapsed:'1.2 / 2 sec',progress:60,sample:'SYNTHETIC REVIEW · holding · 1.2 / 2 sec'},
  complete:{mode:'BOXING · KNEE STRIKES ON · 0% CHANCE',subtitle:'Two-second T-pose captured.',missing:[],cue:'Release',detail:'Calibration complete · release pose',elapsed:'2 / 2 sec',progress:100,sample:'SYNTHETIC REVIEW · complete · release pose'},
  flow:{mode:'FLOW · KNEES NOT REQUIRED',subtitle:'Upper-body landmarks only.',missing:[],cue:'Hold T-pose',detail:'Knee rows omitted in Flow',elapsed:'0.8 / 2 sec',progress:40,sample:'SYNTHETIC REVIEW · Flow · no knee rows',knees:false},
@@ -39,6 +39,7 @@ const poseStatus=key==='knee-flicker'?'waiting':key==='complete'?'done':key==='b
 for(const label of ['Arms level','Elbows straight'])document.querySelector('#pose').append(row(label,key==='boxing-knees-off'?'waiting':'seen',key==='boxing-knees-off'?'Waiting':'Ready'));
 document.querySelector('#pose').append(row('Hold T-pose for 2 seconds',poseStatus,key==='complete'?'Complete':poseStatus==='holding'?'Holding':'Waiting'));
 for(const [id,value] of Object.entries({mode:state.mode,subtitle:state.subtitle,cueText:state.cue,detail:state.detail,elapsed:state.elapsed,sample:state.sample}))document.getElementById(id).textContent=value;
+document.getElementById('subtitle').hidden=!state.subtitle;
 document.querySelector('#progress').style.setProperty('--progress',`${state.progress}%`);document.querySelector('#progress').setAttribute('aria-label',`Hold progress ${state.elapsed}`);
 </script>
 </body></html>
