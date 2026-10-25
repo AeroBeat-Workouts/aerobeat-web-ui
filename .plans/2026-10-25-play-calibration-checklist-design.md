@@ -1,6 +1,6 @@
 # Play calibration checklist — screenshot approval checkpoint
 
-**Status:** Design artifacts ready for screenshot review; Derrick has not approved production checklist UI. Owner: aerobeat-web-ui, current main. Parent: assembly `.plans/2026-10-25-boxing-heights-fixed-colliders-knee-calibration.md`, task D. No production UI, assembly runtime, input, gameplay, renderer, route, or public release edits are in scope.
+**Status:** Design revision 2 ready for renewed screenshot review; Derrick identified landscape hamburger overlap and an almost-touching desktop cue/card in revision 1. Neither revision has production UI approval. Owner: aerobeat-web-ui, current main. Parent: assembly `.plans/2026-10-25-boxing-heights-fixed-colliders-knee-calibration.md`, task D. No production UI, assembly runtime, input, gameplay, renderer, route, or public release edits are in scope.
 
 ## Decision and next check
 
@@ -26,3 +26,9 @@ Owner repo has no Beads database (`bd ready --json`: no database). Parent assemb
 ## Outcome
 
 Design-only, synthetic browser screenshots for Derrick's visual decision. No production screenshot, gameplay acceptance or approval claim. No change to public route.
+
+## Revision 2 — Derrick's screenshot feedback
+
+Derrick found the revision-1 landscape card overlapped the top-right hamburger (card x394–835 and button x788–835 at y36–53), while the desktop cue ended at y251 and card began at y252. Revision 2 changes **only static mockup CSS**: desktop/portrait card starts 12px lower; landscape card starts below the hamburger while retaining a compact two-column layout. The same capture command regenerated all ten screenshots, including the affected desktop (three) and landscape (two); portrait samples shifted down with the card and were also refreshed. The HTML and owner checkpoint are the only text changes; no production code changed. Screenshot names remain the same under `screenshots/play-calibration-checklist/`.
+
+Validation: Chromium/Playwright screenshots regenerated with the existing script; a read-only layout check across all five states at each of the three viewports found **zero menu/card intersections** and no card content scrolling/clipping. Desktop cue/card bounding boxes are y162–250.75 and y264–724.39 respectively (13.25px clearance). Landscape hamburger is x788–836, y8–56; knee-flicker card is x394–834, y91.09–377.69 (non-overlapping vertically); the hold-progress footer is fully visible. Human screenshot approval remains outstanding; parent production `ui_fidelity` stays pending.
